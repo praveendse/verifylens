@@ -50,7 +50,8 @@ Code: `app/api/auth_routes.py`, `app/api/auth_dependencies.py`,
 | Rate limited | 429 | `Too many … Please wait a minute and try again.` + `Retry-After` |
 
 ## Out of scope
-Self-registration, email or password-recovery flows, refresh tokens, MFA, SSO.
+Self-registration, refresh tokens, MFA, SSO. Self-service password recovery
+is proposed separately in [password-recovery.md](password-recovery.md).
 
 ## Open questions
 1. ~~Username case at login~~ **Fixed 2026-11-23** (AUTH-02). Login now
