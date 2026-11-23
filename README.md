@@ -20,8 +20,10 @@ frontend. Store users, searches and reports in SQLite.
 **In scope:** sign-in, two roles (Admin, User), admin user management,
 Wikipedia search with Gemini image verification, Markdown reports, and
 per-user search history.
-**Out of scope:** self-registration, email or password-recovery flows,
-multi-server deployment, and public internet hosting.
+**Added beyond PHX-433 (needs scope approval, off by default):** self-service
+password reset by email link. See [docs/specs/password-recovery.md](docs/specs/password-recovery.md).
+**Out of scope:** self-registration, multi-server deployment, and public
+internet hosting.
 
 | Layer | Technology |
 |---|---|
@@ -31,17 +33,18 @@ multi-server deployment, and public internet hosting.
 | Scraping | Playwright with headless Chromium (`app/services/wikipedia_service.py`) |
 | AI verification | Google Gemini via `google-genai` (`app/services/gemini_service.py`) |
 | Security | PyJWT (HS256), Argon2 via `pwdlib` (`security/`) |
-| Tests | pytest, FastAPI `TestClient` (`tests/`) |
+| Tests | pytest, FastAPI `TestClient` (`tests/`); Vitest + React Testing Library (`frontend-react/src/__tests__/`) |
 | Packaging | `Dockerfile` and `docker-compose.yml` (written, **not yet built**) |
 
 ```text
 app/
-  api/         Routes: auth, users, search, history, admin overview, health; rate limits
+  api/         Routes: auth, password reset, users, search, history, admin overview, health; rate limits
   db/          models.py, repository.py, migrations.py (additive startup upgrades)
   dto/         Request/response models and validation
-  services/    wikipedia, gemini, report, pipeline (orchestration), health
+  services/    wikipedia, gemini, report, pipeline (orchestration), health, mail, password_reset
 security/      Password hashing, password policy, JWT tokens, secret loading
-scripts/       bootstrap_admin, reset_password, backup_db, model_compare, perf_test
+scripts/       bootstrap_admin, reset_password, backup_db, model_compare, perf_test,
+               dev_mail_catcher (local fake mail server)
 tests/         Automated tests (temporary databases, no external calls)
 frontend-react/  React app (src/api/client.js is the only backend boundary)
 ```
@@ -74,6 +77,7 @@ frontend-react/  React app (src/api/client.js is the only backend boundary)
 | FR-11 | Admin overview: users, searches by outcome, 30-day activity, top users, recent errors | ✅ Tested |
 | FR-12 | System status check of API, database, Gemini and Wikipedia (external checks cached for 60 s) | ✅ Tested (external checks mocked) |
 | FR-13 | Failed searches are saved as `ERROR` with a reference ID. Temporary Gemini outages return 503 "try again". | ✅ Tested |
+| FR-14 | Self-service password reset by a one-time email link (15 min). Admins set each user's email. Off by default. Spec: `docs/specs/password-recovery.md`. | ✅ Tested (fake mail sender). **Not yet tried with a real mail server.** |
 
 ### Non-functional requirements
 
@@ -164,8 +168,9 @@ requirement. Where the original motivation was not recorded, the table says so.
 
 | Table | Key columns |
 |---|---|
-| `user` | `username` (unique), `hashed_password`, `role` (`admin` or `user`, CHECK constraint), `is_active`, `full_name`, `token_version`, `must_change_password`, `created_at` |
+| `user` | `username` (unique), `hashed_password`, `role` (`admin` or `user`, CHECK constraint), `is_active`, `full_name`, `email` (optional, unique), `token_version`, `must_change_password`, `created_at` |
 | `searchrecord` | `query`, `status` (`PENDING`, `SUCCESS` or `ERROR`), `matches`, `article_title`, `source_url`, `image_url`, `fields_json`, `report_markdown`, `error_message`, `created_at` (UTC), `user_id` → `user.id` |
+| `passwordresettoken` | `user_id` → `user.id`, `token_hash` (SHA-256 only, never the token), `created_at`, `expires_at`, `used_at`, `requested_ip` |
 
 Tables are created, and missing columns added, automatically at startup.
 Default location: `data/search_history.db` (override with `DATABASE_PATH`).
@@ -182,7 +187,8 @@ deactivated or deleted account loses access immediately.
 | View and delete own history | ✅ | ✅ |
 | View and delete **all** history (including unowned records) | — | ✅ |
 | Change own password | ✅ | ✅ |
-| Create, edit, deactivate, delete users; reset passwords | — | ✅ |
+| Reset own forgotten password by email link (when enabled and an email is set) | ✅ | ✅ |
+| Create, edit, deactivate, delete users; set emails; reset passwords | — | ✅ |
 | Admin overview | — | ✅ |
 | System status | ✅ | ✅ |
 
@@ -234,6 +240,40 @@ folder.
 
 **API documentation:** http://127.0.0.1:8000/docs (Swagger UI) or `/openapi.json`.
 
+### Password reset by email (optional, off by default)
+
+The **Forgot password?** link appears only when the feature is enabled and
+`SMTP_HOST`, `SMTP_FROM` and `APP_BASE_URL` are set. A user can only get a
+link if an admin has set their email (Admin → Edit existing account).
+
+**Try it locally without a real mail server:**
+
+1. Add to `.env` (local development only):
+   ```bash
+   PASSWORD_RESET_ENABLED=true
+   SMTP_HOST=127.0.0.1
+   SMTP_PORT=1025
+   SMTP_STARTTLS=false
+   SMTP_FROM=noreply@verifylens.local
+   APP_BASE_URL=http://127.0.0.1:5173
+   ```
+2. Start the fake mail server in its own terminal. It prints each email
+   (with the reset link) instead of sending it:
+   ```bash
+   python -m scripts.dev_mail_catcher        # listens on 127.0.0.1:1025
+   ```
+3. Refresh the sign-in page, click **Forgot password?**, and open the link
+   printed in the mail-server terminal.
+
+Notes: each link works once and expires after 15 minutes; a new request
+cancels older links; at most 3 emails per account per 15 minutes (extra
+requests are silently ignored). The backend reads `.env` on every request, so
+no restart is needed after changing these settings.
+
+**Production:** point `SMTP_*` at the company mail relay, keep
+`SMTP_STARTTLS=true`, store `SMTP_PASSWORD` as a secret file, and set
+`APP_BASE_URL` to the app's real address. Never run `dev_mail_catcher` on a server.
+
 | Variable | Default | Purpose |
 |---|---|---|
 | `JWT_SECRET_KEY` | — (**required**, ≥ 32 chars) | Signs login tokens. Changing it signs everyone out. |
@@ -247,6 +287,11 @@ folder.
 | `LOGIN_ATTEMPTS_PER_IP_PER_MINUTE` / `_PER_USERNAME_` / `SEARCHES_PER_USER_PER_MINUTE` | `10` / `5` / `5` | Rate limits |
 | `VITE_API_BASE_URL` (`frontend-react/.env`) | `/api/v1` | API base path for React |
 | `VITE_DEMO_MODE` (`frontend-react/.env`) | `false` | UI preview with fake data. **Never enable for real use.** |
+| `PASSWORD_RESET_ENABLED` | `false` | Turns on password reset by email (also needs the three settings below) |
+| `SMTP_HOST` / `SMTP_FROM` / `APP_BASE_URL` | — | Mail server, sender address, and the app's public address used in reset links |
+| `SMTP_PORT` / `SMTP_STARTTLS` | `587` / `true` | Mail server port; encrypt the connection |
+| `SMTP_USERNAME` / `SMTP_PASSWORD` | — | Mail server login, if required (`SMTP_PASSWORD` is a secret) |
+| `PASSWORD_RESET_TOKEN_MINUTES` | `15` | How long a reset link works (5–60) |
 
 **Operations:**
 
@@ -254,7 +299,9 @@ folder.
 |---|---|
 | Admin forgot password | `python -m scripts.reset_password --username admin` (password is prompted) |
 | Back up the database (safe while the app runs) | `python -m scripts.backup_db` |
-| Run tests | `python -m pytest tests` |
+| Fake mail server for local password-reset testing | `python -m scripts.dev_mail_catcher` |
+| Run backend tests | `python -m pytest tests` |
+| Run frontend tests | `cd frontend-react && npm test` |
 
 Docker deployment to an internal server is described in [DEPLOY.md](DEPLOY.md).
 It has **not been tested yet**.
@@ -264,7 +311,7 @@ It has **not been tested yet**.
 ## 7. Testing & Verification
 
 **Automated results (run 2026-11-23, Linux, Python 3.12.16, pytest 9.2.0):
-218 passed, 0 failed, 54.3 s.**
+221 passed, 0 failed, 55.8 s.**
 
 | Area | Test files |
 |---|---|
@@ -274,6 +321,7 @@ It has **not been tested yet**.
 | Gemini service (mocked client) | `test_gemini_service` |
 | Scraper (offline Chromium with stubbed pages) and report generator | `test_wikipedia_service`, `test_report_service` |
 | Admin overview, system status, backups, frontend serving | `test_admin_overview`, `test_system_status`, `test_backup_db`, `test_frontend_serving` |
+| Password reset by email (fake mail sender), fake mail server | `test_password_recovery`, `test_dev_mail_catcher` |
 
 **Strategy.** Each test uses a temporary SQLite database. `tests/conftest.py`
 redirects the app away from `data/` before any import. Requests go through the
@@ -281,8 +329,9 @@ real login, so role and ownership rules are tested end to end inside the API.
 Wikipedia and Gemini are always replaced by fakes, mocks or offline stubs.
 
 **Frontend.** `npm run build` (Vite 7.3.8) succeeded on 2026-11-23.
-`npm test` (Vitest): 33 passed, covering the password-recovery screens and
-admin email fields only. The rest of the UI has no automated tests.
+`npm test` (Vitest): 36 passed, covering the password-recovery screens, admin
+email fields and the Find user clear behaviour only. The rest of the UI has no
+automated tests. `npm audit`: 0 vulnerabilities (2026-11-23).
 
 **Live Gemini evidence.** `scripts/model_compare.py` (2026-11-22) called the
 real Wikipedia and Gemini for 40 labelled cases. The final run scored 40/40.
@@ -295,7 +344,9 @@ end-to-end test of the web app.
   is blocked from admin screens and others' records.
 - Installing from `requirements.txt` into a fresh environment.
 - Docker image build and container start.
-- `npm audit` and dependency vulnerability scan.
+- Python dependency vulnerability scan (`pip-audit` not run).
+- Password reset email delivery through a real mail server (only the local
+  fake mail server has been used).
 
 ---
 
@@ -313,7 +364,12 @@ end-to-end test of the web app.
 - **Refreshing the page signs the user out.** The token is held in memory only.
 - **No logging configuration.** The app adds no logging setup of its own, so
   INFO-level messages (such as the admin password-reset audit line) may not
-  appear under default Uvicorn settings. Not verified.
+  appear under default Uvicorn settings. Not verified. This also hides failed
+  password-reset emails: if the mail server is down, nothing shows in the
+  terminal.
+- **A reset link can't be reopened after a page refresh.** The token is removed
+  from the address bar and kept in memory, so the user must click the email
+  link again.
 - **Schema changes are additive only.** Renaming or dropping columns needs a
   manual script and a backup first.
 - `requirements.txt` is mostly unpinned (only `google-genai` is pinned).
