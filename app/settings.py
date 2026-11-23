@@ -37,6 +37,16 @@ class Settings(BaseSettings):
     login_attempts_per_username_per_minute: int = Field(default=5, ge=1)
     searches_per_user_per_minute: int = Field(default=5, ge=1)
 
+    # Refresh tokens (docs/specs/auth.md, AUTH-12..18). A sign-in lasts while
+    # the user is active within REFRESH_TOKEN_IDLE_HOURS, up to
+    # REFRESH_TOKEN_MAX_DAYS in total, then they must sign in again.
+    refresh_token_idle_hours: int = Field(default=8, ge=1, le=720)
+    refresh_token_max_days: int = Field(default=7, ge=1, le=90)
+    # Keep true outside local HTTP tests. Browsers treat http://localhost as
+    # secure, so local development works with it on.
+    refresh_cookie_secure: bool = True
+    refresh_attempts_per_ip_per_minute: int = Field(default=30, ge=1)
+
     # Self-service password recovery by email (docs/specs/password-recovery.md).
     # Off unless enabled AND SMTP_HOST, SMTP_FROM and APP_BASE_URL are set.
     password_reset_enabled: bool = False

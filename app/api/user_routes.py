@@ -15,6 +15,7 @@ from app.db.database import get_session
 from app.db.models import SearchRecord, User
 from app.dto.auth_models import UserPublic
 from app.dto.user_models import PasswordReset, UserCreate, UserUpdate
+from app.services import refresh_token_service as refresh_svc
 from app.services.password_reset_service import cancel_unused_tokens, delete_tokens
 from security.password_policy import password_problem
 from security.passwords import hash_password
@@ -228,5 +229,6 @@ def delete_user(
         update(SearchRecord).where(SearchRecord.user_id == target.id).values(user_id=None)
     )
     delete_tokens(session, target.id)  # PWR-18
+    refresh_svc.delete_for_user(session, target.id)
     session.delete(target)
     session.commit()

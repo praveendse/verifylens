@@ -76,3 +76,23 @@ class PasswordResetToken(SQLModel, table=True):
     expires_at: datetime = Field(nullable=False)
     used_at: datetime | None = None  # also set when the token is cancelled
     requested_ip: str | None = None
+
+
+class RefreshToken(SQLModel, table=True):
+    """Long-lived sign-in, kept in an HttpOnly cookie. Only the SHA-256 is stored.
+
+    Rotated on every use: the old row gets replaced_at, a new row joins the
+    same family (one family = one sign-in on one browser).
+    """
+
+    id: int | None = Field(default=None, primary_key=True)
+    user_id: int = Field(foreign_key="user.id", index=True, nullable=False)
+    token_hash: str = Field(unique=True, nullable=False)
+    family_id: str = Field(index=True, nullable=False)
+    # Must equal User.token_version, so a password change/reset revokes it.
+    token_version: int = Field(nullable=False)
+    created_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
+    expires_at: datetime = Field(nullable=False)         # idle timeout (sliding)
+    family_expires_at: datetime = Field(nullable=False)  # absolute cap for the sign-in
+    replaced_at: datetime | None = None  # rotated; presenting it again = reuse
+    revoked_at: datetime | None = None   # logout, reuse detected, or user gone

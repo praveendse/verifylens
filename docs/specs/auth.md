@@ -14,7 +14,9 @@ Code: `app/api/auth_routes.py`, `app/api/auth_dependencies.py`,
 |---|---|---|---|
 | POST | `/api/v1/auth/login` | none (form: `username`, `password`) | Returns `{access_token, token_type: "bearer"}` |
 | GET | `/api/v1/auth/me` | token (also while a password change is pending) | Current user, without the hash |
-| POST | `/api/v1/auth/password` | token (also while a password change is pending) | Change own password; returns a new token |
+| POST | `/api/v1/auth/password` | token (also while a password change is pending) | Change own password; returns a new token and refresh cookie |
+| POST | `/api/v1/auth/refresh` | refresh cookie + `X-Requested-With: verifylens` | New access token; rotates the cookie |
+| POST | `/api/v1/auth/logout` | refresh cookie + `X-Requested-With: verifylens` | Revokes this sign-in and clears the cookie (204) |
 
 ## Requirements
 
@@ -31,6 +33,13 @@ Code: `app/api/auth_routes.py`, `app/api/auth_dependencies.py`,
 | AUTH-09 | Passwords are stored only as Argon2 hashes (`pwdlib`). No API response includes `hashed_password`. | Tested: `test_password_hashing`; `test_only_admin_can_manage_users` checks the hash isn't in the response |
 | AUTH-10 | Login rate limit: per client IP (`LOGIN_ATTEMPTS_PER_IP_PER_MINUTE`, default 10) and per lowercased username across all IPs (`LOGIN_ATTEMPTS_PER_USERNAME_PER_MINUTE`, default 5). Sliding 60 s window. Over the limit: 429 with `Retry-After`. | Tested: `test_login_blocked_after_too_many_attempts_for_one_username`, `test_login_blocked_per_ip_across_usernames`, `test_window_expires` |
 | AUTH-11 | Password change rate limit: per user, 60 s window, using the same number as the per-username login limit. Over the limit: 429. | Tested: `test_change_is_rate_limited` |
+| AUTH-12 | Login and password change also set a refresh token cookie `verifylens_refresh`: `HttpOnly`, `Secure` (unless `REFRESH_COOKIE_SECURE=false`), `SameSite=Strict`, `Path=/api/v1/auth`. The raw value never appears in a response body; only its SHA-256 is stored. | Tested: `test_login_sets_httponly_strict_cookie`, `test_cookie_is_secure_by_default`, `test_only_hash_is_stored` |
+| AUTH-13 | `POST /auth/refresh` returns a new access token and rotates the cookie. A missing, unknown, revoked or expired cookie, or an inactive/deleted user, or a changed `token_version`, gets 401 `Session expired. Please sign in again.` and the cookie is cleared. | Tested: `test_refresh_returns_working_access_token_and_rotates`, `test_refresh_without_cookie_is_401`, `test_inactive_user_cannot_refresh`, `test_deleted_user_tokens_are_removed` |
+| AUTH-14 | Reuse detection: presenting a rotated refresh token more than 30 s after rotation revokes every refresh token of that user. Within 30 s (two tabs refreshing at once) it returns an access token without a new cookie. | Tested: `test_reuse_after_grace_revokes_every_session`, `test_concurrent_refresh_within_grace_does_not_log_out` |
+| AUTH-15 | A sign-in ends after `REFRESH_TOKEN_IDLE_HOURS` (default 8) without a refresh, or `REFRESH_TOKEN_MAX_DAYS` (default 7) after login, whichever comes first. Rotation keeps the absolute limit. | Tested: `test_idle_expiry`, `test_absolute_expiry_survives_rotation` |
+| AUTH-16 | Password change, admin password reset and email reset revoke all existing refresh tokens (via `token_version`; self change also marks them revoked). Logout revokes only this browser's sign-in. | Tested: `test_password_change_revokes_other_refresh_tokens_and_issues_new`, `test_admin_reset_revokes_refresh_tokens`, `test_logout_revokes_and_clears_cookie`, `test_logout_only_ends_this_sign_in`. Email reset: relies on the same `token_version` check, no dedicated test. |
+| AUTH-17 | CSRF: `/auth/refresh` and `/auth/logout` require `X-Requested-With: verifylens` (403 otherwise), on top of `SameSite=Strict`. `/auth/refresh` is rate limited per IP (`REFRESH_ATTEMPTS_PER_IP_PER_MINUTE`, default 30). | Tested: `test_refresh_requires_csrf_header`. Rate limit: no dedicated test. |
+| AUTH-18 | Refresh tokens expired or revoked more than 7 days ago are deleted at startup. | Tested: `test_purge_removes_old_rows` |
 
 ## Acceptance criteria
 - **AUTH-02** Given user `bob` is inactive, when he logs in with the correct password, then 401 with the same message as a wrong password.
@@ -50,7 +59,7 @@ Code: `app/api/auth_routes.py`, `app/api/auth_dependencies.py`,
 | Rate limited | 429 | `Too many … Please wait a minute and try again.` + `Retry-After` |
 
 ## Out of scope
-Self-registration, refresh tokens, MFA, SSO. Self-service password recovery
+Self-registration, MFA, SSO. Self-service password recovery
 is proposed separately in [password-recovery.md](password-recovery.md).
 
 ## Open questions
@@ -63,7 +72,12 @@ is proposed separately in [password-recovery.md](password-recovery.md).
 4. The login rate limit counts successful logins too. Is that intended?
 5. The password-change limit reuses the per-username login setting. Should it
    have its own setting?
-6. The token is held in browser memory only, so refreshing the page signs the
-   user out. Is that accepted UX for PHX-433?
-7. Is a 30-minute token without a refresh token acceptable when a search can
-   take minutes?
+6. ~~Page refresh signs the user out~~ **Fixed 2026-11-24** (AUTH-12..15).
+   The sign-in is restored from the refresh cookie.
+7. ~~30-minute token without refresh~~ **Fixed 2026-11-24** (AUTH-13). The
+   client refreshes on a 401 and retries once. A search already running is
+   unaffected either way: the token is checked only when a request starts.
+8. Are 8 hours idle / 7 days absolute the right sign-in lifetimes?
+9. Within the 30 s reuse grace window a thief holding a just-rotated cookie
+   could still get one access token. Accepted to avoid logging out users with
+   several tabs open.
