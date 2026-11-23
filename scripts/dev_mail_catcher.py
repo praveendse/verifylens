@@ -6,6 +6,17 @@ Point the app at it with SMTP_HOST=127.0.0.1, SMTP_PORT=1025, SMTP_STARTTLS=fals
 Never use in production: it accepts any message and keeps nothing.
 """
 import socketserver
+from email import message_from_bytes, policy
+
+
+def render(raw: bytes) -> str:
+    """Readable email: key headers plus the DECODED body. Long lines arrive
+    quoted-printable encoded (e.g. "token=3D..." split over lines), which
+    would break copied links if printed raw."""
+    msg = message_from_bytes(raw, policy=policy.default)
+    headers = [f"{name}: {msg[name]}" for name in ("From", "To", "Subject") if msg[name]]
+    part = msg.get_body(preferencelist=("plain",)) or msg
+    return "\n".join(headers) + "\n\n" + part.get_content().rstrip("\n")
 
 
 class _Handler(socketserver.StreamRequestHandler):
@@ -22,9 +33,10 @@ class _Handler(socketserver.StreamRequestHandler):
             elif verb == "DATA":
                 self._reply("354 end with <CRLF>.<CRLF>")
                 lines = []
-                while (line := self.rfile.readline().decode(errors="replace")) not in (".\r\n", ".\n", ""):
-                    lines.append(line.rstrip("\r\n"))
-                print("\n" + "=" * 70 + "\n" + "\n".join(lines) + "\n" + "=" * 70, flush=True)
+                while (line := self.rfile.readline()) not in (b".\r\n", b".\n", b""):
+                    # SMTP dot-stuffing: a leading ".." stands for "."
+                    lines.append(line[1:] if line.startswith(b"..") else line)
+                print("\n" + "=" * 70 + "\n" + render(b"".join(lines)) + "\n" + "=" * 70, flush=True)
                 self._reply("250 OK")
             elif verb == "QUIT":
                 self._reply("221 bye")
