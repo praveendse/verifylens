@@ -160,3 +160,16 @@ def test_admin_can_deactivate_user_and_block_login(api):
     assert resp.status_code == 200, resp.text
     assert resp.json()["is_active"] is False
     assert client.post("/api/v1/auth/login", data={"username": "bob", "password": "secure-bob-pass-123"}).status_code == 401
+
+
+@pytest.mark.parametrize("password", [" " * 12, "\t" * 12, " \n " * 5])
+def test_create_rejects_whitespace_only_password(api, password):
+    """AUTH-08 / USR-03: create applies the same password rules as reset and change."""
+    client, engine = api
+    admin_headers = authorization(client, "superadmin", "secure-admin-pass-123")
+    body = {"username": "dave", "password": password, "role": "user"}
+    rejected = client.post("/api/v1/users", headers=admin_headers, json=body)
+    assert rejected.status_code == 422, rejected.text
+    assert "only spaces" in rejected.text
+    with Session(engine) as session:
+        assert session.exec(select(User).where(User.username == "dave")).first() is None

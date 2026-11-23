@@ -26,7 +26,10 @@ def login(
     form: Annotated[OAuth2PasswordRequestForm, Depends()],
     session: Annotated[Session, Depends(get_session)],
 ):
-    user = session.exec(select(User).where(User.username == form.username)).first()
+    # Usernames are stored trimmed and lowercase (UserCreate, CLI scripts), so
+    # match them the same way here. Same key the login rate limiter uses.
+    username = form.username.strip().lower()
+    user = session.exec(select(User).where(User.username == username)).first()
     if user is None or not user.is_active or not verify_password(form.password, user.hashed_password):
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,

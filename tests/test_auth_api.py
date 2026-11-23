@@ -86,3 +86,15 @@ def test_user_role_not_admin(api):
         with pytest.raises(HTTPException) as exc_info:
             require_admin(user)
         assert exc_info.value.status_code == 403
+
+
+@pytest.mark.parametrize("typed", ["Admin_Test", "ADMIN_TEST", "  admin_test  "])
+def test_login_username_ignores_case_and_surrounding_spaces(api, typed):
+    """AUTH-02: usernames are stored lowercase, so login must match them the same way."""
+    response = login(api, username=typed)
+    assert response.status_code == 200, response.text
+
+
+def test_login_username_case_does_not_bypass_password(api):
+    """AUTH-02: case-insensitive username matching still requires the right password."""
+    assert login(api, username="ADMIN_TEST", password="wrong").status_code == 401
