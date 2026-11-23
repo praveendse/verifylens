@@ -1,7 +1,7 @@
 """Public authentication response DTOs: never expose hashed_password."""
 from typing import Literal
 
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict, Field, field_validator
 
 
 class AccessToken(BaseModel):
@@ -18,8 +18,28 @@ class UserPublic(BaseModel):
     role: Literal["admin", "user"]
     is_active: bool
     must_change_password: bool = False
+    email: str | None = None
 
 
 class PasswordChange(BaseModel):
     current_password: str = Field(min_length=1, max_length=256)
     new_password: str = Field(min_length=12, max_length=256)
+
+
+class PasswordResetRequest(BaseModel):
+    identifier: str = Field(min_length=1, max_length=254)  # username or email
+
+    @field_validator("identifier")
+    @classmethod
+    def normalize(cls, value: str) -> str:
+        value = value.strip().lower()
+        if not value:
+            raise ValueError("Enter your username or email.")
+        return value
+
+
+class PasswordResetConfirm(BaseModel):
+    token: str = Field(min_length=1, max_length=128)
+    # No min_length here: the token is checked first (400), then the password
+    # rules (422) via password_problem, without using up the token.
+    new_password: str = Field(max_length=256)

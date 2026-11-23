@@ -33,3 +33,9 @@ def create_db_and_tables():
 def get_session():
     with Session(engine) as session:
         yield session
+
+
+def get_session_factory():
+    """For work that runs after the response (background tasks), when the
+    request's own session is already closed. Overridden in tests."""
+    return lambda: Session(engine)

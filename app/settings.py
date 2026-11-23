@@ -37,6 +37,20 @@ class Settings(BaseSettings):
     login_attempts_per_username_per_minute: int = Field(default=5, ge=1)
     searches_per_user_per_minute: int = Field(default=5, ge=1)
 
+    # Self-service password recovery by email (docs/specs/password-recovery.md).
+    # Off unless enabled AND SMTP_HOST, SMTP_FROM and APP_BASE_URL are set.
+    password_reset_enabled: bool = False
+    password_reset_token_minutes: int = Field(default=15, ge=5, le=60)
+    # Public address of the app, used to build reset links. Never derived
+    # from the request's Host header, which a client controls.
+    app_base_url: str | None = None
+    smtp_host: str | None = None
+    smtp_port: int = Field(default=587, ge=1, le=65535)
+    smtp_username: str | None = None
+    smtp_password: str | None = None  # secret: env, .env or SECRETS_DIR
+    smtp_from: str | None = None
+    smtp_starttls: bool = True
+
     model_config = SettingsConfigDict(
         env_file=".env",
         env_file_encoding="utf-8",

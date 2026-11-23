@@ -20,6 +20,7 @@ ADDED_COLUMNS = (
     ("user", "token_version", "INTEGER NOT NULL DEFAULT 0"),
     ("user", "must_change_password", "BOOLEAN NOT NULL DEFAULT 0"),
     ("searchrecord", "user_id", "INTEGER REFERENCES user(id)"),
+    ("user", "email", "TEXT"),
 )
 
 
@@ -34,6 +35,8 @@ def upgrade_schema(engine: Engine) -> list[str]:
                 conn.execute(text(f'ALTER TABLE "{table}" ADD COLUMN {column} {definition}'))
                 added.append(f"{table}.{column}")
         conn.execute(text("CREATE INDEX IF NOT EXISTS ix_searchrecord_user_id ON searchrecord(user_id)"))
+        # Same name as the Index in models.User, so new and upgraded databases match.
+        conn.execute(text('CREATE UNIQUE INDEX IF NOT EXISTS ux_user_email ON "user"(email)'))
     if added:
         logger.warning("Database schema upgraded, added: %s", ", ".join(added))
     return added
