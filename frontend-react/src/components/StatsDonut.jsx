@@ -1,17 +1,16 @@
 import { useId, useState } from 'react';
-import { AlertTriangle, CheckCircle2, Clock3, XCircle } from 'lucide-react';
 import './stats-donut.css';
 
 /* Status categories, in fixed order (colour follows the category, never its rank).
-   Colours are the shared --viz-* chart tokens (styles.css); each row also has an icon + label,
+   Colours are the shared --viz-* chart tokens (styles.css); each row also has a text label,
    so identity never depends on colour alone. */
 // `key` is the field name in the GET /history/stats response.
 export const CATEGORIES = [
-  { key: 'match', label: 'Match verified', color: 'var(--viz-match)', icon: CheckCircle2 },
-  { key: 'no_match', label: 'No match', color: 'var(--viz-no-match)', icon: AlertTriangle },
-  { key: 'error', label: 'Error', color: 'var(--viz-error)', icon: XCircle },
+  { key: 'match', label: 'Match verified', color: 'var(--viz-match)' },
+  { key: 'no_match', label: 'No match', color: 'var(--viz-no-match)' },
+  { key: 'error', label: 'Failed', color: 'var(--viz-error)' },
   // Anything else (PENDING, SUCCESS without a verdict, unknown statuses). Hidden when 0.
-  { key: 'other', label: 'Pending / other', color: 'var(--viz-other)', icon: Clock3, optional: true },
+  { key: 'other', label: 'Not finished', color: 'var(--viz-other)', optional: true },
 ];
 
 const R = 54;            // ring radius (viewBox units)
@@ -89,7 +88,6 @@ export default function StatsDonut({ stats, title = 'Search outcomes', subtitle,
 
         <ul className="donut-legend">
           {rows.map(row => {
-            const Icon = row.icon;
             return (
               <li
                 key={row.key}
@@ -101,7 +99,6 @@ export default function StatsDonut({ stats, title = 'Search outcomes', subtitle,
                 onBlur={() => setActive(null)}
               >
                 <span className="donut-swatch" style={{ background: row.color }} />
-                <Icon size={15} className="donut-icon" aria-hidden="true" />
                 <span className="donut-label">{row.label}</span>
                 <span className="donut-count">{row.count}</span>
                 <span className="donut-pct">{pct(row.count, total)}%</span>

@@ -23,6 +23,36 @@ def test_requires_authentication():
     assert response.status_code in (401, 403)
 
 
+class _FakeHealth:
+    def status(self):
+        return health_service.SystemStatusResponse(
+            status="degraded",
+            checked_at="2026-11-21T00:00:00Z",
+            components=[_component("api"), _component("gemini", "down", "API key not configured")],
+        )
+
+
+def _get_as(role):
+    class _User:
+        pass
+    user = _User()
+    user.role = role
+    app.dependency_overrides[get_current_user] = lambda: user
+    app.dependency_overrides[get_health_service] = lambda: _FakeHealth()
+    try:
+        return TestClient(app).get("/api/v1/health/systems")
+    finally:
+        app.dependency_overrides.clear()
+
+
+def test_normal_user_gets_overall_status_only():
+    response = _get_as("user")
+    assert response.status_code == 200
+    body = response.json()
+    assert body["status"] == "degraded"
+    assert body["components"] == []
+
+
 def test_returns_component_statuses_when_signed_in():
     class FakeHealth:
         def status(self):
@@ -32,7 +62,10 @@ def test_returns_component_statuses_when_signed_in():
                 components=[_component("api"), _component("gemini", "down", "API key not configured")],
             )
 
-    app.dependency_overrides[get_current_user] = lambda: object()
+    class Admin:
+        role = "admin"
+
+    app.dependency_overrides[get_current_user] = lambda: Admin()
     app.dependency_overrides[get_health_service] = lambda: FakeHealth()
     try:
         response = TestClient(app).get("/api/v1/health/systems")

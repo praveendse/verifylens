@@ -14,6 +14,7 @@ from sqlmodel import Session, select
 from app.api.auth_dependencies import require_admin
 from app.db.database import get_session
 from app.db.models import SearchRecord, User
+from app.services.search_errors import describe
 
 router = APIRouter(prefix="/admin", tags=["Admin"])
 
@@ -24,16 +25,16 @@ IDLE_SAMPLE = 5
 RECENT_ERRORS = 8
 ERROR_CAUSES = 3
 
-# Search errors are stored as the exception class name only (see search_routes),
-# so they are safe to show. Known ones get a readable label.
-ERROR_LABELS = {
-    "GeminiVerificationError": "Gemini returned an unusable answer",
-    "GeminiUnavailableError": "Gemini unavailable (timeout or rate limit)",
-    "TimeoutError": "Timed out",
-    "PlaywrightTimeoutError": "Wikipedia page timed out",
-    "ValueError": "Invalid article or image",
-    "RuntimeError": "Download failed",
-}
+
+
+def _merge_causes(causes, label) -> list[dict]:
+    """Old records store class names, new ones codes; both can share a label.
+    Merge rows by label, then keep the most common few."""
+    merged: dict[str, dict] = {}
+    for code, n in causes:
+        row = merged.setdefault(label(code), {"code": code, "label": label(code), "count": 0})
+        row["count"] += n
+    return sorted(merged.values(), key=lambda r: -r["count"])[:ERROR_CAUSES]
 
 
 def _outcome():
@@ -153,12 +154,10 @@ def admin_overview(
         select(cause, func.count())
         .where(SearchRecord.status == "ERROR", SearchRecord.created_at >= trend_start)
         .group_by(cause)
-        .order_by(func.count().desc())
-        .limit(ERROR_CAUSES)
     ).all()
 
     def label(code):
-        return ERROR_LABELS.get(code or "", code or "Unknown")
+        return describe(code)[0]
 
     return {
         "generated_at": now.isoformat(),
@@ -180,5 +179,5 @@ def admin_overview(
              "username": username}
             for rid, q, code, created, username in recent_errors
         ],
-        "error_causes": [{"code": c, "label": label(c), "count": n} for c, n in causes],
+        "error_causes": _merge_causes(causes, label),
     }

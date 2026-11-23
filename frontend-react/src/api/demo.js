@@ -15,7 +15,7 @@ const records = [
   },
   {
     id: 101, query: 'BMW', article_title: 'BMW', status: 'ERROR', matches: null,
-    error_message: 'Demo processing error', created_at: '2026-11-19T09:12:00+05:30', user_id: 3,
+    error_message: 'That name matches several Wikipedia articles. Try a more specific name.', created_at: '2026-11-19T09:12:00+05:30', user_id: 3,
   },
 ];
 const users = [
@@ -123,8 +123,8 @@ export const demo = {
       daily,
       top_users: perUser.filter(p => p.searches).sort((a, b) => b.searches - a.searches).slice(0, 5),
       idle_users: { count: idle.length, sample: idle.slice(0, 5).map(({ id, username, full_name }) => ({ id, username, full_name })) },
-      recent_errors: errors.slice(0, 8).map(r => ({ id: r.id, query: r.query, code: 'DemoError', label: r.error_message || 'Demo error', created_at: r.created_at, username: users.find(u => u.id === r.user_id)?.username ?? null })),
-      error_causes: errors.length ? [{ code: 'DemoError', label: 'Demo error', count: errors.length }] : [],
+      recent_errors: errors.slice(0, 8).map(r => ({ id: r.id, query: r.query, code: 'ambiguous', label: 'Name has several meanings', created_at: r.created_at, username: users.find(u => u.id === r.user_id)?.username ?? null })),
+      error_causes: errors.length ? [{ code: 'ambiguous', label: 'Name has several meanings', count: errors.length }] : [],
     };
   },
   async updateUser(token, userId, changes) {

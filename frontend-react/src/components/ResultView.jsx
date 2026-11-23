@@ -4,7 +4,7 @@ import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 
 export function StatusBadge({ status, matches, compact = false }) {
-  if (status === 'ERROR') return <span className={`status-badge status-error ${compact ? 'status-compact' : ''}`}><XCircle size={13}/> Error</span>;
+  if (status === 'ERROR') return <span className={`status-badge status-error ${compact ? 'status-compact' : ''}`}><XCircle size={13}/> Failed</span>;
   if (status === 'PENDING') return <span className={`status-badge status-pending ${compact ? 'status-compact' : ''}`}>Processing</span>;
   if (status === 'SUCCESS' && matches === false) return <span className={`status-badge status-error ${compact ? 'status-compact' : ''}`}><XCircle size={13}/> No match</span>;
   if (status === 'SUCCESS' && matches === true) return <span className={`status-badge status-success ${compact ? 'status-compact' : ''}`}><CheckCircle2 size={13}/> Match verified</span>;
@@ -36,7 +36,7 @@ export default function ResultView({ result, isDemo = false, onClear }) {
       <div className="result-card">
         <div className="result-topline"><div><span className="micro-label">WIKIPEDIA ARTICLE</span><h3>{title}</h3><p>Search query: {query}</p></div><StatusBadge status={status} matches={matches}/></div>
         {status !== 'SUCCESS' ? (
-          <div className="alert alert-danger"><AlertTriangle size={17}/> This attempt did not complete successfully. {result.error_message || 'Check the backend logs for details.'}</div>
+          <div className="alert alert-danger"><AlertTriangle size={17}/> This search couldn&rsquo;t be completed. {result.error_message || 'Please try again.'}</div>
         ) : (
           <>
             <div className="result-grid">

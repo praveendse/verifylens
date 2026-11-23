@@ -55,7 +55,7 @@ def check_database() -> ComponentStatus:
         with Session(engine) as session:
             session.exec(text("SELECT 1")).one()
 
-    return _timed("database", "Database", probe)
+    return _timed("database", "Saved data", probe)
 
 
 def check_gemini(settings: Settings) -> ComponentStatus:
@@ -73,7 +73,7 @@ def check_gemini(settings: Settings) -> ComponentStatus:
         # Metadata lookup: proves key validity + reachability without generating tokens.
         client.models.get(model=settings.gemini_model)
 
-    return _timed("gemini", "Gemini API", probe)
+    return _timed("gemini", "Image check (Gemini)", probe)
 
 
 def check_wikipedia() -> ComponentStatus:
@@ -113,7 +113,7 @@ class SystemHealthService:
             return results
 
     def status(self) -> SystemStatusResponse:
-        api = ComponentStatus(name="api", label="API server", status="ok", latency_ms=0, detail=None)
+        api = ComponentStatus(name="api", label="App server", status="ok", latency_ms=0, detail=None)
         components = [api, check_database(), *self._external()]
         overall = "ok" if all(c.status == "ok" for c in components) else "degraded"
         return SystemStatusResponse(

@@ -3,6 +3,8 @@ from urllib.parse import urljoin, urlsplit
 
 from playwright.sync_api import Page
 
+from app.services.search_errors import SearchFailure
+
 def scrape_article(page: Page, topic: str) -> dict:
     """Extract Wikipedia article information."""
 
@@ -17,6 +19,14 @@ def scrape_article(page: Page, topic: str) -> dict:
 
     title = heading.inner_text()
 
+    # Wikipedia shows its search results page when no article has this name.
+    if page.locator("body.mw-special-Search, .searchresults").count() > 0:
+        raise SearchFailure("no_article")
+
+    # A disambiguation page lists several articles; there is nothing to verify.
+    if page.locator("#disambigbox, .dmbox-disambig").count() > 0:
+        raise SearchFailure("ambiguous")
+
     # Extract first meaningful paragraph
     paragraphs = page.locator(
         "#mw-content-text p"
@@ -28,7 +38,7 @@ def scrape_article(page: Page, topic: str) -> dict:
     )
 
     if not paragraph:
-        raise ValueError("Article paragraph not found")
+        raise SearchFailure("no_text")
 
     # Extract available infobox fields DYNAMICALLY
     fields = {}
@@ -57,12 +67,12 @@ def scrape_article(page: Page, topic: str) -> dict:
         ).first
 
     if image.count() == 0:
-        raise ValueError("Article image not found")
+        raise SearchFailure("no_image")
 
     src = image.get_attribute("src")
 
     if not src:
-        raise ValueError("Article image URL not found")
+        raise SearchFailure("no_image")
 
     return {
         "title": title,
@@ -82,19 +92,17 @@ def download_infobox_image(
     response = page.request.get(image_url)
 
     if not response.ok:
-        raise RuntimeError(
-            f"Image download failed: {response.status}"
-        )
+        raise SearchFailure("image_download")
 
     content_type = response.headers.get("content-type", "")
 
     if not content_type.startswith("image/"):
-        raise ValueError("Downloaded content is not an image")
+        raise SearchFailure("image_format")
 
     extension = Path(urlsplit(image_url).path).suffix.lower()
 
     if extension not in (".jpg", ".jpeg", ".png", ".webp", ".gif"):
-        raise ValueError(f"Unsupported image format: {extension}")
+        raise SearchFailure("image_format")
 
     download_dir.mkdir(parents=True, exist_ok=True)
 

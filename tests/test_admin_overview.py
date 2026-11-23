@@ -105,6 +105,15 @@ def test_recent_errors_and_causes(api):
     data = overview(client)
     newest = data["recent_errors"][0]
     assert (newest["query"], newest["username"], newest["code"]) == ("Moon", None, "GeminiVerificationError")
-    assert newest["label"] == "Gemini returned an unusable answer"
+    assert newest["label"] == "Image check gave no usable answer"
     assert newest["created_at"].endswith("+00:00")
-    assert data["error_causes"][0] == {"code": "TimeoutError", "label": "Timed out", "count": 2}
+    assert data["error_causes"][0] == {"code": "TimeoutError", "label": "Wikipedia didn't respond", "count": 2}
+
+
+def test_old_and_new_error_codes_share_one_cause(api):
+    client, engine = api
+    alice = user_id(engine, "alice")
+    add(engine, alice, 1, status="ERROR", matches=None, error="ValueError", query="gtr")
+    add(engine, alice, 1, status="ERROR", matches=None, error="no_image", query="benz")
+    causes = overview(client)["error_causes"]
+    assert [(c["label"], c["count"]) for c in causes] == [("Article has no image", 2)]

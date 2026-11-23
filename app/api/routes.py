@@ -18,11 +18,16 @@ def health_check() -> HealthResponse:
 
 @router.get("/health/systems", response_model=SystemStatusResponse)
 def system_status(
-    _user=Depends(get_current_user),  # signed-in users only: dependency status is internal info
+    user=Depends(get_current_user),  # signed-in users only: dependency status is internal info
     health: SystemHealthService = Depends(get_health_service),
 ) -> SystemStatusResponse:
-    """Live check of API, database, Gemini and Wikipedia (external checks cached 60s)."""
-    return health.status()
+    """Live check of API, database, Gemini and Wikipedia (external checks cached 60s).
+
+    Admins get every component; other users get only the overall status."""
+    result = health.status()
+    if getattr(user, "role", None) != "admin":
+        result = result.model_copy(update={"components": []})
+    return result
 
 
 # The legacy Task 02 route GET /report was removed: it ran the full

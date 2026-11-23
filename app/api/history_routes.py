@@ -9,6 +9,7 @@ from app.api.auth_dependencies import get_current_user
 from app.db.database import get_session
 from app.db.models import SearchRecord, User
 from app.db.repository import SearchRepository
+from app.services.search_errors import describe
 
 router = APIRouter(tags=["History"])
 
@@ -105,6 +106,7 @@ def get_search_history_detail(
         "image_url": record.image_url,
         "fields": json.loads(record.fields_json) if record.fields_json else {},
         "report_markdown": record.report_markdown,
-        "error_message": record.error_message,
+        # Plain-language reason, never the stored code.
+        "error_message": describe(record.error_message)[1] if record.status == "ERROR" else None,
         "created_at": record.created_at,
     }

@@ -200,8 +200,8 @@ always remain.
 - Secrets are read from environment variables, `.env` (local development
   only), or files in `SECRETS_DIR` (default `/run/secrets`).
 - `.env`, `data/` and `*.db` are listed in `.gitignore` and `.dockerignore`.
-- API responses never include password hashes. Errors store only the
-  exception class name.
+- API responses never include password hashes. Failed searches store only a
+  short error code (see `app/services/search_errors.py`).
 - Reports render without raw HTML, so report text cannot inject markup or
   scripts.
 
