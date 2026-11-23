@@ -264,7 +264,7 @@ It has **not been tested yet**.
 ## 7. Testing & Verification
 
 **Automated results (run 2026-11-23, Linux, Python 3.12.16, pytest 9.2.0):
-162 passed, 0 failed, 31.7 s.**
+169 passed, 0 failed, 35.7 s.**
 
 | Area | Test files |
 |---|---|

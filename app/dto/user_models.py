@@ -3,6 +3,8 @@ from typing import Literal
 
 from pydantic import BaseModel, Field, field_validator, model_validator
 
+from security.password_policy import password_problem
+
 
 class UserCreate(BaseModel):
     username: str = Field(min_length=3, max_length=64, pattern=r"^[a-zA-Z0-9._-]+$")
@@ -21,10 +23,11 @@ class UserCreate(BaseModel):
         return (value.strip() or None) if value is not None else None
 
     @model_validator(mode="after")
-    def password_must_not_contain_username(self) -> "UserCreate":
-        # Same rule as scripts/bootstrap_admin.py; username is already lowercased.
-        if self.username in self.password.lower():
-            raise ValueError("Password must not contain the username.")
+    def password_must_meet_policy(self) -> "UserCreate":
+        # The same rules as admin reset, self change and the CLI scripts.
+        problem = password_problem(self.username, self.password)
+        if problem:
+            raise ValueError(problem)
         return self
 
 
