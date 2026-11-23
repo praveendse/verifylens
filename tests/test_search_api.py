@@ -174,7 +174,7 @@ def test_failed_search(test_setup):
 
         assert len(records) == 1
         assert records[0].status == "ERROR"
-        assert records[0].error_message == "RuntimeError"
+        assert records[0].error_message == "unknown"
 
 
 # Test 3: History endpoint retrieves stored searches

@@ -36,7 +36,7 @@ def test_gemini_unavailable_returns_503_and_records_the_error(api):
     assert "try again" in resp.json()["detail"]
     with Session(engine) as session:
         record = session.exec(select(SearchRecord)).one()
-    assert (record.status, record.error_message) == ("ERROR", "GeminiUnavailableError")
+    assert (record.status, record.error_message) == ("ERROR", "ai_busy")
 
 
 def test_other_failures_still_return_500(api):
@@ -44,4 +44,19 @@ def test_other_failures_still_return_500(api):
     resp = search_with(client, RuntimeError("download failed"))
 
     assert resp.status_code == 500
-    assert "Search processing failed" in resp.json()["detail"]
+    detail = resp.json()["detail"]
+    assert "Something went wrong" in detail and "#" not in detail
+    assert "RuntimeError" not in detail and "download failed" not in detail
+
+
+def test_ambiguous_topic_returns_422_with_a_plain_reason(api):
+    from app.services.search_errors import SearchFailure
+
+    client, engine = api
+    resp = search_with(client, SearchFailure("ambiguous"))
+
+    assert resp.status_code == 422
+    assert "more specific name" in resp.json()["detail"]
+    with Session(engine) as session:
+        record = session.exec(select(SearchRecord)).one()
+    assert record.error_message == "ambiguous"

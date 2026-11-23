@@ -10,6 +10,7 @@ from app.db.database import get_session
 from app.db.repository import SearchRepository
 from app.dto.models import SearchRequest, SearchResponse
 from app.services.gemini_service import GeminiUnavailableError
+from app.services.search_errors import code_for, describe
 from app.services.pipeline_service import PipelineService
 
 from app.api.auth_dependencies import get_current_user
@@ -80,20 +81,21 @@ def search_wikipedia(
             record.id,
         )
 
-        repository.mark_error(
-            record=record,
-            message=type(exc).__name__,
-        )
+        # Store a short code; the user gets a plain-language reason for it.
+        code = code_for(exc)
+        repository.mark_error(record=record, message=code)
+        _, message = describe(code)
 
+        # 503 = temporary (try again later), 422 = nothing to verify for this
+        # topic, 500 = our fault.
         if isinstance(exc, GeminiUnavailableError):
-            # Temporary: timeouts, rate limits or Gemini server errors that
-            # persisted through the retries. Tell the user to try again.
-            raise HTTPException(
-                status_code=503,
-                detail=f"Gemini is busy or unreachable right now. Please try again in a minute. Record ID: {record.id}",
-            ) from exc
+            status = 503
+        elif code in ("no_article", "ambiguous", "no_text", "no_image", "image_format"):
+            status = 422
+        else:
+            status = 500
 
         raise HTTPException(
-            status_code=500,
-            detail=f"Search processing failed. Record ID: {record.id}",
+            status_code=status,
+            detail=message,  # record id stays in the logs and History, not the message
         ) from exc

@@ -10,6 +10,7 @@ import pytest
 
 sync_api = pytest.importorskip("playwright.sync_api")
 
+from app.services.search_errors import SearchFailure  # noqa: E402
 from app.services.wikipedia_service import download_infobox_image, scrape_article  # noqa: E402
 
 PNG = (  # 1x1 transparent PNG
@@ -40,6 +41,18 @@ ARTICLE_FIGURE_ONLY = """<html><body>
 <div id="mw-content-text"><div class="mw-parser-output">
 <p>This article has no infobox, only a figure further down the page.</p>
 <figure><img src="/media/figure.jpg"></figure>
+</div></div></body></html>"""
+
+SEARCH_RESULTS = """<html><body class="mw-special-Search">
+<h1 id="firstHeading">Search results</h1>
+<div id="mw-content-text"><div class="searchresults"><p>There were no results matching the query.</p></div></div>
+</body></html>"""
+
+DISAMBIGUATION = """<html><body>
+<h1 id="firstHeading">GTR</h1>
+<div id="mw-content-text"><div class="mw-parser-output">
+<p>GTR or GT-R may refer to several different things listed below.</p>
+<div id="disambigbox">This disambiguation page lists articles associated with the title GTR.</div>
 </div></div></body></html>"""
 
 ARTICLE_NO_IMAGE = """<html><body>
@@ -116,8 +129,19 @@ def test_article_without_image_is_rejected(offline_page):
     page, responses, _ = offline_page
     serve_article(responses, ARTICLE_NO_IMAGE)
 
-    with pytest.raises(ValueError, match="image not found"):
+    with pytest.raises(SearchFailure) as err:
         scrape_article(page, "Bare Topic")
+    assert err.value.code == "no_image"
+
+
+@pytest.mark.parametrize("html, code", [(SEARCH_RESULTS, "no_article"), (DISAMBIGUATION, "ambiguous")])
+def test_pages_that_are_not_one_article_are_explained(offline_page, html, code):
+    page, responses, _ = offline_page
+    serve_article(responses, html)
+
+    with pytest.raises(SearchFailure) as err:
+        scrape_article(page, "gtr")
+    assert err.value.code == code
 
 
 # download_infobox_image uses page.request (an API client that page.route does
@@ -157,16 +181,17 @@ def test_downloads_image_to_work_dir(tmp_path: Path):
 
 
 @pytest.mark.parametrize(
-    "url, response, error",
+    "url, response, code",
     [
-        ("https://upload.wikimedia.org/missing.png", (404, "text/plain", b"nope"), RuntimeError),
-        ("https://upload.wikimedia.org/page.png", (200, "text/html", b"<html></html>"), ValueError),
-        ("https://upload.wikimedia.org/vector.svg", (200, "image/svg+xml", b"<svg/>"), ValueError),
+        ("https://upload.wikimedia.org/missing.png", (404, "text/plain", b"nope"), "image_download"),
+        ("https://upload.wikimedia.org/page.png", (200, "text/html", b"<html></html>"), "image_format"),
+        ("https://upload.wikimedia.org/vector.svg", (200, "image/svg+xml", b"<svg/>"), "image_format"),
     ],
 )
-def test_bad_image_downloads_are_rejected(tmp_path: Path, url, response, error):
+def test_bad_image_downloads_are_rejected(tmp_path: Path, url, response, code):
     page = _StubPage(_StubResponse(*response))
 
-    with pytest.raises(error):
+    with pytest.raises(SearchFailure) as err:
         download_infobox_image(page, url, tmp_path)
+    assert err.value.code == code
     assert not list(tmp_path.iterdir())  # nothing written
