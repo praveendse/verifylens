@@ -1,0 +1,26 @@
+# Backend API
+fastapi[standard]
+pydantic-settings
+
+# Wikipedia scraping
+playwright
+
+# Gemini AI
+# Pinned: Gemini 3 parameters (thinking_level) need a recent SDK, and an
+# unpinned reinstall could pull in breaking changes. Upgrade deliberately.
+google-genai==3.6.1
+python-dotenv
+
+# Database (SQLite)
+sqlmodel
+
+# Testing
+pytest
+httpx
+
+
+PyJWT
+python-multipart
+
+# Password hashing (security/passwords.py) — was missing from this list
+pwdlib[argon2]

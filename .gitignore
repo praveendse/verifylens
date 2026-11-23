@@ -1,0 +1,21 @@
+# Secrets
+.env
+.env.*
+!.env.example
+frontend-react/.env
+frontend-react/.env.*
+!frontend-react/.env.example
+
+# Live data and backups (contain password hashes and search history)
+data/
+backups/
+*.db
+*.db-wal
+*.db-shm
+
+# Generated
+output/
+frontend-react/dist/
+frontend-react/node_modules/
+__pycache__/
+.pytest_cache/

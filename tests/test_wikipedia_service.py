@@ -1,0 +1,172 @@
+"""Wikipedia scraper and image download, fully offline.
+
+A real headless Chromium runs the scraper, but every request is answered by
+page.route() with the canned pages below: nothing reaches the internet.
+Skipped if Playwright's Chromium is not installed.
+"""
+from pathlib import Path
+
+import pytest
+
+sync_api = pytest.importorskip("playwright.sync_api")
+
+from app.services.wikipedia_service import download_infobox_image, scrape_article  # noqa: E402
+
+PNG = (  # 1x1 transparent PNG
+    b"\x89PNG\r\n\x1a\n\x00\x00\x00\rIHDR\x00\x00\x00\x01\x00\x00\x00\x01\x08\x06\x00\x00\x00\x1f\x15\xc4\x89"
+    b"\x00\x00\x00\rIDATx\x9cc\xf8\x0f\x00\x00\x01\x01\x00\x05\x18\xd8N\x00\x00\x00\x00IEND\xaeB`\x82"
+)
+
+MAIN_PAGE = """<html><body>
+<form action="/w/index.php"><input name="search"></form>
+</body></html>"""
+
+ARTICLE_WITH_INFOBOX = """<html><body>
+<h1 id="firstHeading">Eiffel Tower</h1>
+<div id="mw-content-text"><div class="mw-parser-output">
+<p>Short.</p>
+<table class="infobox">
+  <tr><th colspan="2">Eiffel Tower</th></tr>
+  <tr><td colspan="2"><img src="//upload.wikimedia.org/eiffel.png"></td></tr>
+  <tr><th>Location</th><td>Paris, France</td></tr>
+  <tr><th>Height</th><td>330 m</td></tr>
+  <tr><th>Empty</th><td></td></tr>
+</table>
+<p>The Eiffel Tower is a wrought-iron lattice tower on the Champ de Mars in Paris.</p>
+</div></div></body></html>"""
+
+ARTICLE_FIGURE_ONLY = """<html><body>
+<h1 id="firstHeading">Some Topic</h1>
+<div id="mw-content-text"><div class="mw-parser-output">
+<p>This article has no infobox, only a figure further down the page.</p>
+<figure><img src="/media/figure.jpg"></figure>
+</div></div></body></html>"""
+
+ARTICLE_NO_IMAGE = """<html><body>
+<h1 id="firstHeading">Bare Topic</h1>
+<div id="mw-content-text"><p>This article has a paragraph but no image at all anywhere.</p></div>
+</body></html>"""
+
+
+@pytest.fixture(scope="module")
+def browser():
+    with sync_api.sync_playwright() as p:
+        try:
+            b = p.chromium.launch(headless=True)
+        except Exception as exc:  # browser binaries not installed
+            pytest.skip(f"Playwright Chromium unavailable: {exc}")
+        yield b
+        b.close()
+
+
+@pytest.fixture
+def offline_page(browser):
+    """Page whose every request is served from `responses` (url substring -> (status, type, body))."""
+    context = browser.new_context()
+    page = context.new_page()
+    responses = {}
+    requested = []
+
+    def handle(route):
+        url = route.request.url
+        requested.append(url)
+        for key, (status, content_type, body) in responses.items():
+            if key in url:
+                return route.fulfill(status=status, content_type=content_type, body=body)
+        return route.fulfill(status=404, content_type="text/plain", body="not found")
+
+    context.route("**/*", handle)
+    yield page, responses, requested
+    context.close()
+
+
+def serve_article(responses, html):
+    responses["/wiki/Main_Page"] = (200, "text/html", MAIN_PAGE)
+    responses["/w/index.php"] = (200, "text/html", html)
+
+
+def test_scrapes_title_paragraph_infobox_and_image(offline_page):
+    page, responses, requested = offline_page
+    serve_article(responses, ARTICLE_WITH_INFOBOX)
+
+    result = scrape_article(page, "Eiffel Tower")
+
+    assert result["title"] == "Eiffel Tower"
+    assert result["paragraph"].startswith("The Eiffel Tower is a wrought-iron")  # skips the short <p>
+    assert result["fields"] == {"location": "Paris, France", "height": "330 m"}  # header-only/empty rows dropped
+    assert result["image_url"] == "https://upload.wikimedia.org/eiffel.png"  # protocol-relative resolved
+    assert result["source_url"].startswith("https://en.wikipedia.org/w/index.php?search=Eiffel+Tower")
+    # Both navigations went through the route stub (the browser's image fetch
+    # from upload.wikimedia.org is stubbed too, with a 404).
+    assert any("/wiki/Main_Page" in u for u in requested)
+    assert any("/w/index.php?search=" in u for u in requested)
+
+
+def test_falls_back_to_figure_image_without_infobox(offline_page):
+    page, responses, _ = offline_page
+    serve_article(responses, ARTICLE_FIGURE_ONLY)
+
+    result = scrape_article(page, "Some Topic")
+
+    assert result["fields"] == {}
+    assert result["image_url"] == "https://en.wikipedia.org/media/figure.jpg"
+
+
+def test_article_without_image_is_rejected(offline_page):
+    page, responses, _ = offline_page
+    serve_article(responses, ARTICLE_NO_IMAGE)
+
+    with pytest.raises(ValueError, match="image not found"):
+        scrape_article(page, "Bare Topic")
+
+
+# download_infobox_image uses page.request (an API client that page.route does
+# NOT intercept), so it gets a stub page instead of a real browser.
+
+class _StubResponse:
+    def __init__(self, status, content_type, body):
+        self.status, self.ok = status, 200 <= status < 300
+        self.headers = {"content-type": content_type}
+        self._body = body
+
+    def body(self):
+        return self._body
+
+
+class _StubPage:
+    def __init__(self, response):
+        self.requested = []
+        page = self
+
+        class _Request:
+            def get(self, url):
+                page.requested.append(url)
+                return response
+
+        self.request = _Request()
+
+
+def test_downloads_image_to_work_dir(tmp_path: Path):
+    page = _StubPage(_StubResponse(200, "image/png", PNG))
+
+    path = download_infobox_image(page, "https://upload.wikimedia.org/eiffel.png", tmp_path / "downloads")
+
+    assert page.requested == ["https://upload.wikimedia.org/eiffel.png"]
+    assert path == tmp_path / "downloads" / "infobox_image.png"
+    assert path.read_bytes() == PNG
+
+
+@pytest.mark.parametrize(
+    "url, response, error",
+    [
+        ("https://upload.wikimedia.org/missing.png", (404, "text/plain", b"nope"), RuntimeError),
+        ("https://upload.wikimedia.org/page.png", (200, "text/html", b"<html></html>"), ValueError),
+        ("https://upload.wikimedia.org/vector.svg", (200, "image/svg+xml", b"<svg/>"), ValueError),
+    ],
+)
+def test_bad_image_downloads_are_rejected(tmp_path: Path, url, response, error):
+    page = _StubPage(_StubResponse(*response))
+
+    with pytest.raises(error):
+        download_infobox_image(page, url, tmp_path)
+    assert not list(tmp_path.iterdir())  # nothing written

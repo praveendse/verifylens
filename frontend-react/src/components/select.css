@@ -1,0 +1,97 @@
+/* Themed dropdown (Select.jsx): pill trigger, rounded floating list, forest accents */
+.ui-select { position: relative; width: 100%; }
+
+.ui-select-trigger {
+  display: flex; align-items: center; gap: 10px; width: 100%; height: 46px; padding: 0 16px 0 20px;
+  border: 1px solid var(--border-strong); border-radius: var(--pill);
+  background: var(--field); color: var(--text); font-size: 14.5px; text-align: left;
+  transition: border-color .15s ease, box-shadow .15s ease, background .15s ease;
+}
+.ui-select-trigger:hover:not(:disabled) { border-color: var(--subtle); }
+.ui-select-trigger:focus-visible,
+.ui-select.is-open .ui-select-trigger { outline: none; border-color: var(--ink); box-shadow: 0 0 0 4px var(--ink-ring); }
+.ui-select-trigger:disabled { background: var(--surface-2); color: var(--subtle); opacity: 1; }
+
+.ui-select-value { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.ui-select-value.is-placeholder { color: var(--placeholder); }
+.ui-select-chevron { flex-shrink: 0; color: var(--subtle); transition: transform .18s ease; }
+.ui-select.is-open .ui-select-chevron { transform: rotate(180deg); color: var(--ink); }
+
+.ui-select-popup {
+  position: fixed; z-index: 1000; box-sizing: border-box;
+  display: flex; flex-direction: column; overflow: hidden;
+  border: 1px solid var(--border); border-radius: var(--r-inner); background: var(--surface);
+  box-shadow: 0 22px 48px -18px rgba(20, 40, 20, 0.28), 0 4px 12px -6px rgba(20, 40, 20, 0.12);
+  font-family: var(--font); color: var(--text);
+  animation: ui-select-in .14s ease-out;
+}
+.ui-select-popup.is-up { animation-name: ui-select-in-up; }
+@keyframes ui-select-in { from { opacity: 0; transform: translateY(-4px); } to { opacity: 1; transform: none; } }
+@keyframes ui-select-in-up { from { opacity: 0; transform: translateY(4px); } to { opacity: 1; transform: none; } }
+
+.ui-select-list {
+  flex: 1 1 auto; min-height: 0; overflow-y: auto; overscroll-behavior: contain;
+  margin: 0; padding: 6px; list-style: none; outline: none;
+}
+.ui-select-list:empty { display: none; }
+
+/* Search box pinned to the top of the popup */
+.ui-select-search {
+  flex-shrink: 0; display: flex; align-items: center; gap: 8px;
+  margin: 8px 8px 2px; padding: 0 6px 0 14px; height: 40px;
+  border: 1px solid var(--border-strong); border-radius: var(--pill); background: var(--surface-2);
+  color: var(--subtle); transition: border-color .15s ease, box-shadow .15s ease, background .15s ease;
+}
+.ui-select-search:focus-within { border-color: var(--ink); background: var(--field); box-shadow: 0 0 0 4px var(--ink-ring); color: var(--ink); }
+.ui-select-search input {
+  flex: 1; min-width: 0; height: 100%; padding: 0; border: 0; background: transparent;
+  color: var(--text); font: inherit; font-size: 14px;
+}
+.ui-select-search input:focus { border: 0 !important; box-shadow: none !important; }
+.ui-select-search input::placeholder { color: var(--placeholder); }
+.ui-select-clear {
+  display: grid; place-items: center; width: 26px; height: 26px; padding: 0;
+  border: 0; border-radius: 50%; background: transparent; color: var(--subtle);
+}
+.ui-select-clear:hover { background: var(--border); color: var(--text); }
+
+.ui-select-status { flex-shrink: 0; margin: 0; padding: 4px 18px 10px; font-size: 13px; color: var(--subtle); }
+.ui-select-status:empty { display: none; }
+.ui-select-list:empty + .ui-select-status { padding: 18px; text-align: center; font-size: 13.5px; }
+
+@media (prefers-reduced-motion: reduce) { .ui-select-popup { animation: none; } .ui-select-chevron { transition: none; } }
+
+.ui-select-option {
+  display: flex; align-items: center; gap: 10px; padding: 10px 14px;
+  border-radius: 14px; font-size: 14.5px; color: var(--text); cursor: pointer;
+}
+.ui-select-option + .ui-select-option { margin-top: 2px; }
+.ui-select-option.is-active { background: var(--forest-tint); }
+.ui-select-option.is-selected { color: var(--forest); font-weight: 600; }
+.ui-select-option-body { flex: 1; min-width: 0; }
+.ui-select-check { flex-shrink: 0; color: var(--forest); }
+
+/* User rows: avatar + name/@username + role tag */
+.ui-select-user { display: flex; align-items: center; gap: 12px; min-width: 0; }
+.ui-select-user .user-avatar { width: 32px; height: 32px; font-size: 11.5px; }
+.ui-select-option.is-active .user-avatar,
+.ui-select-option.is-selected .user-avatar { background: var(--forest); border-color: var(--forest); color: #ffffff; }
+.ui-select-user-text { flex: 1; min-width: 0; }
+.ui-select-user-text strong, .ui-select-user-text small { display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.ui-select-user-text strong { font-size: 14px; font-weight: 600; color: var(--text); }
+.ui-select-user-text small { margin-top: 2px; font-size: 12px; font-weight: 400; color: var(--subtle); }
+.ui-select-user .role-tag { flex-shrink: 0; }
+.ui-select-you { display: inline-block; margin-left: 8px; padding: 1px 8px; border-radius: var(--pill); border: 1px solid var(--forest); background: var(--surface); color: var(--forest); font-size: 10.5px; font-weight: 700; letter-spacing: .4px; text-transform: uppercase; vertical-align: 1px; }
+.ui-select-muted { margin-left: 4px; color: var(--subtle); font-size: 13px; }
+
+/* Search-only picker (UserSearch.jsx): pill input with leading search icon */
+.ui-search { position: relative; display: flex; align-items: center; width: 100%; }
+.ui-search-icon { position: absolute; left: 18px; color: var(--subtle); pointer-events: none; transition: color .15s ease; }
+.ui-search:focus-within .ui-search-icon, .ui-search.is-open .ui-search-icon { color: var(--ink); }
+.user-manager-form .ui-search input { padding-left: 46px; padding-right: 44px; }
+.ui-search-clear { position: absolute; right: 10px; }
+.ui-search.is-disabled .ui-search-icon { opacity: .5; }
+
+/* Server-side search (UserSearch): dim the old results while the next query runs */
+.ui-select-list.is-refreshing { opacity: .55; transition: opacity .15s ease; }
+.ui-select-status.is-error { color: var(--fail); }

@@ -1,0 +1,46 @@
+/* Destructive-action confirmation (ConfirmDialog.jsx) */
+.confirm-dialog {
+  width: min(420px, calc(100vw - 32px)); padding: 26px 26px 22px;
+  border: 1px solid var(--border); border-radius: var(--r-card);
+  background: var(--surface); color: var(--text);
+  box-shadow: 0 30px 60px -24px rgba(10, 25, 10, 0.5);
+  text-align: center;
+}
+.confirm-dialog[open] { animation: confirm-in .14s ease-out; }
+.confirm-dialog::backdrop { background: rgba(9, 20, 10, 0.45); backdrop-filter: blur(2px); }
+@keyframes confirm-in { from { opacity: 0; transform: scale(.97); } to { opacity: 1; transform: none; } }
+@media (prefers-reduced-motion: reduce) { .confirm-dialog[open] { animation: none; } }
+
+.confirm-icon {
+  display: grid; place-items: center; width: 42px; height: 42px; margin: 0 auto; border-radius: 50%;
+  background: var(--fail-bg); border: 1px solid var(--fail-line); color: var(--fail);
+}
+.confirm-dialog h2 { margin: 16px 0 8px; font-size: 18px; letter-spacing: -0.02em; }
+.confirm-body { font-size: 14px; line-height: 1.6; color: var(--muted); }
+.confirm-body p { margin: 0 0 8px; }
+.confirm-body strong { color: var(--text); }
+.confirm-dialog .alert { margin: 14px 0 0; }
+.confirm-actions { display: flex; justify-content: center; gap: 10px; margin-top: 22px; }
+
+/* Red button for irreversible actions; also used outside dialogs */
+.danger-button {
+  display: inline-flex; align-items: center; justify-content: center; gap: 8px;
+  height: var(--btn-h); padding: 0 var(--btn-pad-x); border-radius: var(--pill);
+  border: 1px solid #991b1b; background: linear-gradient(180deg, #c62828 0%, #a61b1b 100%); color: #ffffff;
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.18), 0 6px 14px -8px rgba(153, 27, 27, 0.7);
+  font-size: var(--btn-font); font-weight: 600; white-space: nowrap;
+}
+.danger-button:hover:not(:disabled) { background: linear-gradient(180deg, #b71c1c 0%, #8f1515 100%); }
+.danger-button:disabled { opacity: .65; }
+.danger-button:focus-visible { outline: 2px solid var(--fail); outline-offset: 3px; }
+
+/* Quiet red outline: the entry point that opens the confirmation */
+.danger-outline-button {
+  display: inline-flex; align-items: center; justify-content: center; gap: 8px;
+  height: var(--btn-h); padding: 0 18px; border-radius: var(--pill);
+  border: 1px solid var(--fail-line); background: transparent; color: var(--fail);
+  font-size: var(--btn-font); font-weight: 600; white-space: nowrap;
+  transition: background .15s ease, border-color .15s ease;
+}
+.danger-outline-button:hover:not(:disabled) { background: var(--fail-bg); border-color: #f5a3a3; }
+.danger-outline-button:disabled { opacity: .55; }

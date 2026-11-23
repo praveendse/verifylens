@@ -1,0 +1,31 @@
+# Docker matches these from the repo root; "**/" is needed for nested paths.
+
+# Secrets — never bake into an image
+**/.env
+**/.env.*
+!**/.env.example
+
+# Live data and backups (password hashes, search history)
+data/
+backups/
+**/*.db
+**/*.db-wal
+**/*.db-shm
+
+# Built/installed inside the image instead
+frontend-react/dist/
+frontend-react/node_modules/
+
+# Not needed at runtime
+output/
+tests/
+docs/
+.vscode/
+.git/
+**/__pycache__/
+**/*.pyc
+.pytest_cache/
+**/*.backup
+Dockerfile
+docker-compose.yml
+DEPLOY.md
