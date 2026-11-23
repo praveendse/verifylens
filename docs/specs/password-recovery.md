@@ -1,6 +1,8 @@
 # Self-Service Password Recovery (Email Link)
 Status: **Built** (branch `password-recovery`, 2026-11-23): backend and
-frontend. Off by default (PWR-15). Not yet tried with a real mail server. **Needs scope approval before it is
+frontend. Off by default (PWR-15). Verified end to end with real email
+(Gmail SMTP + App Password, dev machine, 2026-11-23): email arrived and the
+reset worked. Production mail account/relay not chosen yet. **Needs scope approval before it is
 switched on:** PHX-433 lists password recovery as out of scope. Approver: _TBD_.
 Ticket: _TBD_.
 
@@ -82,6 +84,9 @@ Tests: `tests/test_password_recovery.py`.
   the new table without losing rows.
 - **Manual run on the internal server** with the real SMTP relay: the email
   arrives, the link opens the app, and the reset works. Record the result.
+  - 2026-11-23, dev machine, Gmail (`smtp.gmail.com:587`, STARTTLS, App
+    Password): **passed**. Email delivered, link opened the app, new password
+    set. Still to do on the internal server with the production account.
 
 ## Out of scope
 SMS or phone recovery, security questions, users changing their own email
