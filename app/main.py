@@ -16,6 +16,7 @@ from app.api.user_routes import router as user_router
 from app.api.admin_routes import router as admin_router
 from app.api.password_reset_routes import router as password_reset_router
 from app.services.password_reset_service import config_problem, purge_old_tokens
+from app.services.refresh_token_service import purge_old as purge_old_refresh_tokens
 
 
 settings = Settings()
@@ -27,6 +28,7 @@ async def lifespan(_app: FastAPI):
     validate_secrets()  # refuse to start with a missing/weak JWT secret
     upgrade_schema(engine)  # additive only: creates missing tables/columns
     purge_old_tokens(engine)  # PWR-16: drop reset tokens used/expired > 7 days ago
+    purge_old_refresh_tokens(engine)  # AUTH-18
     problem = config_problem(Settings())
     if problem:
         logger.warning(problem)  # PWR-15: feature stays off until fixed

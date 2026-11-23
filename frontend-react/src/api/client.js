@@ -1,7 +1,9 @@
 /**
  * Centralized API boundary. Backend must enforce authentication and permissions;
  * hidden React tabs are not an authorization mechanism.
- * Bearer tokens remain in React memory, not localStorage.
+ * Access tokens stay in React memory, never in localStorage. The long-lived
+ * refresh token is an HttpOnly cookie that JavaScript cannot read; the
+ * browser sends it only to /auth/refresh, /auth/login and /auth/logout.
  */
 const BASE = (import.meta.env.VITE_API_BASE_URL || '/api/v1').replace(/\/$/, '');
 
@@ -13,8 +15,41 @@ export class ApiError extends Error {
   }
 }
 
-async function call(path, { method = 'GET', token, body, form } = {}) {
-  const headers = { Accept: 'application/json' };
+// Required by the backend on cookie-authenticated calls (CSRF guard).
+const CSRF_HEADERS = { 'X-Requested-With': 'verifylens' };
+
+let onTokenRefreshed = null;
+let refreshing = null;
+
+/**
+ * New access token from the refresh cookie, or null if the sign-in is over.
+ * Concurrent callers share one request, so a burst of 401s refreshes once.
+ */
+function refreshAccessToken() {
+  if (!refreshing) {
+    refreshing = request('/auth/refresh', { method: 'POST', extraHeaders: CSRF_HEADERS })
+      .then(data => data?.access_token || null, () => null)
+      .finally(() => { refreshing = null; });
+  }
+  return refreshing;
+}
+
+async function call(path, options = {}) {
+  try {
+    return await request(path, options);
+  } catch (err) {
+    // Expired access token: refresh once and retry. A 401 is returned before
+    // the server does any work, so retrying a POST cannot repeat it.
+    if (!(err instanceof ApiError) || err.status !== 401 || !options.token) throw err;
+    const token = await refreshAccessToken();
+    if (!token) throw err;
+    onTokenRefreshed?.(token);
+    return request(path, { ...options, token });
+  }
+}
+
+async function request(path, { method = 'GET', token, body, form, extraHeaders } = {}) {
+  const headers = { Accept: 'application/json', ...extraHeaders };
   if (token) headers.Authorization = `Bearer ${token}`;
   if (body !== undefined) headers['Content-Type'] = 'application/json';
   if (form) headers['Content-Type'] = 'application/x-www-form-urlencoded';
@@ -24,6 +59,7 @@ async function call(path, { method = 'GET', token, body, form } = {}) {
     response = await fetch(`${BASE}${path}`, {
       method,
       headers,
+      credentials: 'same-origin', // send the refresh cookie (same-origin API only)
       body: form ? new URLSearchParams(form) : body !== undefined ? JSON.stringify(body) : undefined,
     });
   } catch {
@@ -57,6 +93,23 @@ export const api = {
     if (!data?.access_token) throw new ApiError('Login did not return an access token.');
     const user = await call('/auth/me', { token: data.access_token });
     return { token: data.access_token, user };
+  },
+  /**
+   * Restore the sign-in after a page reload, from the refresh cookie.
+   * @returns {Promise<{ token: string, user: object } | null>}
+   */
+  async restoreSession() {
+    const token = await refreshAccessToken();
+    if (!token) return null;
+    try { return { token, user: await request('/auth/me', { token }) }; }
+    catch { return null; }
+  },
+  /** Called with each new access token obtained by a silent refresh. */
+  onTokenRefreshed(listener) { onTokenRefreshed = listener; },
+  /** Ends this browser's sign-in on the server. Never throws. */
+  async logout() {
+    try { await request('/auth/logout', { method: 'POST', extraHeaders: CSRF_HEADERS }); }
+    catch { /* signed out locally either way */ }
   },
   me: (token) => call('/auth/me', { token }),
   /** Own password. Returns { access_token } — a new token; the old one stops working. */

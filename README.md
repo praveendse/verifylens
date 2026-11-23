@@ -59,7 +59,7 @@ frontend-react/  React app (src/api/client.js is the only backend boundary)
 
 | ID | Requirement | Implementation | Status |
 |---|---|---|---|
-| FR-01 | Authentication and authorization in the FastAPI backend | `/auth/login` issues a JWT. Every route except `/health` and `/auth/login` requires it (`app/api/auth_dependencies.py`). | ✅ Implemented and tested |
+| FR-01 | Authentication and authorization in the FastAPI backend | `/auth/login` issues a JWT and a refresh cookie. Every route except `/health` and the `/auth/login`, `/auth/refresh`, `/auth/logout` endpoints requires the JWT (`app/api/auth_dependencies.py`). | ✅ Implemented and tested |
 | FR-02 | Two user types: Admin and User | `user.role`, restricted to `admin` or `user` by a database CHECK constraint | ✅ Implemented and tested |
 | FR-03 | Admin can create and manage users | `/users`: create, list/search, edit name, role and active flag, reset password, delete (`app/api/user_routes.py`) | ✅ Implemented and tested |
 | FR-04 | Normal users access only authorized functionality | `require_admin` guards `/users/*` and `/admin/*`. Users see only their own history; another user's record returns 404. | ✅ Implemented and tested |
@@ -77,7 +77,8 @@ frontend-react/  React app (src/api/client.js is the only backend boundary)
 | FR-11 | Admin overview: users, searches by outcome, 30-day activity, top users, recent errors | ✅ Tested |
 | FR-12 | System status check of API, database, Gemini and Wikipedia (external checks cached for 60 s) | ✅ Tested (external checks mocked) |
 | FR-13 | Failed searches are saved as `ERROR` with a reference ID. Temporary Gemini outages return 503 "try again". | ✅ Tested |
-| FR-14 | Self-service password reset by a one-time email link (15 min). Admins set each user's email. Off by default. Spec: `docs/specs/password-recovery.md`. | ✅ Tested (fake mail sender). **Not yet tried with a real mail server.** |
+| FR-14 | Self-service password reset by a one-time email link (15 min). Admins set each user's email. Off by default. Spec: `docs/specs/password-recovery.md`. | ✅ Tested (fake mail sender). Verified once with real email (Gmail SMTP, dev machine, 2026-11-23). **Not yet tried on the server with the production mail account.** |
+| FR-15 | Users stay signed in across page reloads and past the 30-min access token, via a rotating refresh token in an HttpOnly cookie. Logout ends the sign-in on the server. Spec: `docs/specs/auth.md` AUTH-12..18. | ✅ Tested. **No browser run yet.** |
 
 ### Non-functional requirements
 
@@ -88,9 +89,9 @@ acceptance criteria.
 | ID | Category | Requirement | Status |
 |---|---|---|---|
 | NFR-01 | Security | Passwords stored only as Argon2 hashes. At least 12 characters, and must not contain the username. | ✅ Tested |
-| NFR-02 | Security | JWT expires (default 30 min) and is checked for issuer and audience. A password change revokes old tokens. | ✅ Tested |
+| NFR-02 | Security | JWT expires (default 30 min) and is checked for issuer and audience. A password change revokes old tokens. Refresh tokens: HttpOnly, `Secure`, `SameSite=Strict` cookie; only the SHA-256 is stored; rotated on every use; reuse of an old token signs the user out everywhere; sign-in ends after 8 h idle or 7 days. | ✅ Tested |
 | NFR-03 | Security | The app refuses to start without a `JWT_SECRET_KEY` of at least 32 characters. Secrets never go in code or the image. | ✅ Tested |
-| NFR-04 | Security | Rate limits: login per IP (10/min) and per username (5/min), searches per user (5/min), password changes. All configurable. | ✅ Tested |
+| NFR-04 | Security | Rate limits: login per IP (10/min) and per username (5/min), token refresh per IP (30/min), searches per user (5/min), password changes. All configurable. | ✅ Tested |
 | NFR-05 | Security | Authorization enforced on the server. React hides admin screens for convenience only. | ✅ Tested |
 | NFR-06 | Reliability | Each Gemini request is cut off after 75 s. Temporary errors (408/429/5xx) are retried with backoff. The total wait is capped at 2× the timeout. | ✅ Tested (mocked) |
 | NFR-07 | Reliability | Gemini output is validated against a JSON schema. Truncated, repetitive or over-long answers are rejected. | ✅ Tested (mocked) |
@@ -154,7 +155,7 @@ requirement. Where the original motivation was not recorded, the table says so.
 | **SQLite** | Named in the Jira issue. A single file, no server to run. | One writer at a time, so the app must run as **one process** (see Limitations). |
 | **SQLModel** | One class is both the table and the Pydantic model. *Why it was chosen over plain SQLAlchemy was not recorded.* | No Alembic. `app/db/migrations.py` can only add tables and columns. |
 | **Repository pattern** | `SearchRepository` keeps search-record SQL out of the route handlers. *Original motivation not recorded.* | Applied to search records only. User and admin routes query SQLModel directly. |
-| **JWT (HS256) + Argon2** | Stateless tokens with a 30-min expiry. A `token_version` claim lets a password change revoke old tokens. Argon2 is the `pwdlib` default and a memory-hard hash. | Token is kept in React memory only (not `localStorage`), so refreshing the page signs you out. |
+| **JWT (HS256) + Argon2** | Stateless tokens with a 30-min expiry. A `token_version` claim lets a password change revoke old tokens. Argon2 is the `pwdlib` default and a memory-hard hash. | Access token is kept in React memory only (not `localStorage`). A rotating refresh token in an HttpOnly cookie restores the sign-in after a page reload and renews expired access tokens. |
 | **RBAC + user-owned records** | The Jira issue requires that normal users reach only what they are authorized for. Each search stores `user_id` taken from the token, never from the request. Non-owners get 404, so record IDs are not revealed. | Old records with no owner are visible only to admins. |
 | **Playwright** | Drives Wikipedia's own search box and reads the rendered page, so a search term resolves the way it does for a person. *Why Playwright rather than the Wikipedia API was not recorded.* | Needs a Chromium download. Slower than an API call. Breaks if Wikipedia changes its page structure. |
 | **Gemini `gemini-3.5-flash-lite`, thinking level `low`** | A code comment in `app/settings.py` says the previous model, `gemini-2.5-flash`, shuts down on 2026-12-01 and that this is its named replacement at the same price; the date and price have not been checked against Google's documentation. `scripts/model_compare.py` compared Flash-Lite at the `minimal`, `low` and `medium` thinking levels on 40 hand-labelled cases (2026-11-22). The final `low` run scored 40/40. | Only Flash-Lite variants were compared. The labels are the author's assumption, not human-reviewed. An earlier run had one near-miss error (Marie Curie article with Pierre Curie image judged a match). Override with `GEMINI_MODEL`. |
@@ -170,6 +171,7 @@ requirement. Where the original motivation was not recorded, the table says so.
 |---|---|
 | `user` | `username` (unique), `hashed_password`, `role` (`admin` or `user`, CHECK constraint), `is_active`, `full_name`, `email` (optional, unique), `token_version`, `must_change_password`, `created_at` |
 | `searchrecord` | `query`, `status` (`PENDING`, `SUCCESS` or `ERROR`), `matches`, `article_title`, `source_url`, `image_url`, `fields_json`, `report_markdown`, `error_message`, `created_at` (UTC), `user_id` → `user.id` |
+| `refreshtoken` | `user_id` → `user.id`, `token_hash` (SHA-256 only), `family_id` (one sign-in), `token_version`, `expires_at` (idle), `family_expires_at` (absolute), `replaced_at`, `revoked_at` |
 | `passwordresettoken` | `user_id` → `user.id`, `token_hash` (SHA-256 only, never the token), `created_at`, `expires_at`, `used_at`, `requested_ip` |
 
 Tables are created, and missing columns added, automatically at startup.
@@ -283,7 +285,10 @@ no restart is needed after changing these settings.
 | `GEMINI_TIMEOUT_SECONDS` | `75` | Per-request timeout (10–300) |
 | `HEADLESS` | `true` | Run Chromium headless |
 | `DATABASE_PATH` | `data/search_history.db` | SQLite file |
-| `JWT_ACCESS_TOKEN_MINUTES` | `30` | Token lifetime |
+| `JWT_ACCESS_TOKEN_MINUTES` | `30` | Access token lifetime (renewed silently while signed in) |
+| `REFRESH_TOKEN_IDLE_HOURS` / `REFRESH_TOKEN_MAX_DAYS` | `8` / `7` | Sign-in ends after this long without activity / this long in total |
+| `REFRESH_COOKIE_SECURE` | `true` | Refresh cookie sent over HTTPS only. Browsers allow it on `http://localhost`. Never set `false` in production. |
+| `REFRESH_ATTEMPTS_PER_IP_PER_MINUTE` | `30` | Rate limit for `/auth/refresh` |
 | `LOGIN_ATTEMPTS_PER_IP_PER_MINUTE` / `_PER_USERNAME_` / `SEARCHES_PER_USER_PER_MINUTE` | `10` / `5` / `5` | Rate limits |
 | `VITE_API_BASE_URL` (`frontend-react/.env`) | `/api/v1` | API base path for React |
 | `VITE_DEMO_MODE` (`frontend-react/.env`) | `false` | UI preview with fake data. **Never enable for real use.** |
@@ -310,12 +315,13 @@ It has **not been tested yet**.
 
 ## 7. Testing & Verification
 
-**Automated results (run 2026-11-23, Linux, Python 3.12.16, pytest 9.2.0):
-221 passed, 0 failed, 55.8 s.**
+**Automated results (run 2026-11-24, Linux, Python 3.12.16, pytest 9.2.0):
+243 passed, 0 failed, 64.9 s.**
 
 | Area | Test files |
 |---|---|
 | Login, tokens, rate limits, secrets | `test_auth_api`, `test_password_reset`, `test_rate_limit`, `test_secrets`, `test_user_foundation` |
+| Refresh tokens: rotation, reuse detection, expiry, logout, revocation, CSRF header | `test_refresh_tokens` |
 | Roles and ownership | `test_rbac_api`, `test_delete_api`, `test_history_paging`, `test_user_paging` |
 | Search API (fake pipeline) and Gemini errors | `test_search_api`, `test_search_gemini_errors`, `test_api` (old `/report` route stays removed) |
 | Gemini service (mocked client) | `test_gemini_service` |
@@ -328,10 +334,11 @@ redirects the app away from `data/` before any import. Requests go through the
 real login, so role and ownership rules are tested end to end inside the API.
 Wikipedia and Gemini are always replaced by fakes, mocks or offline stubs.
 
-**Frontend.** `npm run build` (Vite 7.3.8) succeeded on 2026-11-23.
-`npm test` (Vitest): 36 passed, covering the password-recovery screens, admin
-email fields and the Find user clear behaviour only. The rest of the UI has no
-automated tests. `npm audit`: 0 vulnerabilities (2026-11-23).
+**Frontend.** `npm run build` succeeded on 2026-11-24.
+`npm test` (Vitest, run 2026-11-24): 55 passed, covering the password-recovery
+screens, admin email fields and overview, system status, the Find user clear
+behaviour, and session handling (silent refresh and retry, restore after
+reload, logout). The rest of the UI has no automated tests. `npm audit`: 0 vulnerabilities (2026-11-23).
 
 **Live Gemini evidence.** `scripts/model_compare.py` (2026-11-22) called the
 real Wikipedia and Gemini for 40 labelled cases. The final run scored 40/40.
@@ -342,11 +349,14 @@ end-to-end test of the web app.
 - Manual end-to-end run in the browser: an admin creates a user; that user
   changes the temporary password, searches, opens the report and history, and
   is blocked from admin screens and others' records.
+- Staying signed in in a real browser: page reload, a request after the
+  30-min access token expires, two tabs open, and logout. Only checked with
+  automated tests and `curl` against a local server (2026-11-24).
 - Installing from `requirements.txt` into a fresh environment.
 - Docker image build and container start.
 - Python dependency vulnerability scan (`pip-audit` not run).
-- Password reset email delivery through a real mail server (only the local
-  fake mail server has been used).
+- Password reset email delivery on the server with the production mail
+  account (only Gmail from the dev machine has been tried).
 
 ---
 
@@ -361,7 +371,12 @@ end-to-end test of the web app.
   images, such as a spouse's portrait, can be accepted as a match.
 - **The report links the image by its Wikipedia URL.** The downloaded copy is
   temporary and not stored.
-- **Refreshing the page signs the user out.** The token is held in memory only.
+- **Staying signed in after a reload needs HTTPS** (or `localhost`). The refresh
+  cookie is `Secure`, so over plain HTTP on another host the browser drops it
+  and users must sign in again after every reload, as before.
+- **The API must be same-origin with the React app** (served by FastAPI or the
+  Vite proxy). A cross-origin `VITE_API_BASE_URL` would need CORS with
+  credentials, which is not set up.
 - **No logging configuration.** The app adds no logging setup of its own, so
   INFO-level messages (such as the admin password-reset audit line) may not
   appear under default Uvicorn settings. Not verified. This also hides failed

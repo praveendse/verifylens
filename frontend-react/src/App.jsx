@@ -19,8 +19,10 @@ const NO_FILTER = { q: '', status: '' };
 const USERS_PAGE_SIZE = 20;
 
 export default function App() {
-  // Token kept in memory. Refreshing the page requires a new login.
+  // Access token kept in memory only. After a page reload the sign-in is
+  // restored from the HttpOnly refresh cookie (see api.restoreSession).
   const [session, setSession] = useState(null);
+  const [restoring, setRestoring] = useState(() => !readResetToken() && typeof service.restoreSession === 'function');
   const [section, setSection] = useState('verify');
   const [menuOpen, setMenuOpen] = useState(false);
   const [authBusy, setAuthBusy] = useState(false);
@@ -67,7 +69,30 @@ export default function App() {
     return () => { live = false; };
   }, []);
 
+  // Silent refreshes inside the API client hand the new token back here. The
+  // token is swapped on the current session object on purpose: a new object
+  // would re-run every data effect and reset paging and open records.
+  const sessionRef = useRef(null);
+  sessionRef.current = session;
+  useEffect(() => {
+    service.onTokenRefreshed?.(token => { if (sessionRef.current) sessionRef.current.token = token; });
+    return () => service.onTokenRefreshed?.(null);
+  }, []);
+
+  useEffect(() => {
+    if (!restoring) return undefined;
+    let live = true;
+    service.restoreSession()
+      .then(data => {
+        if (!live || !data || !['admin', 'user'].includes(data.user?.role)) return;
+        setSession(data); setSection(data.user.role === 'admin' ? 'overview' : 'verify');
+      })
+      .finally(() => { if (live) setRestoring(false); });
+    return () => { live = false; };
+  }, [restoring]);
+
   const logout = useCallback(() => {
+    service.logout?.(); // revoke the refresh cookie; local sign-out doesn't wait
     setAuthView('login'); setAuthNotice('');
     setSession(null); setSection('verify'); setResult(null); setHistory([]); setUsers([]);
     setUsersHasMore(false); setUsersTotal(null); setOverview(null); setOverviewError('');
@@ -308,6 +333,11 @@ export default function App() {
 
   const showLogin = () => { setResetToken(null); setAuthView('login'); };
 
+  if (restoring) {
+    return <div role="status" style={{ minHeight: '100vh', display: 'grid', placeItems: 'center' }}>
+      <span className="spinner" aria-label="Restoring your session"/>
+    </div>;
+  }
   if (!session) {
     if (authView === 'forgot') return <ForgotPasswordPage onSubmit={requestReset} onBack={showLogin}/>;
     if (authView === 'reset' && resetToken) {
