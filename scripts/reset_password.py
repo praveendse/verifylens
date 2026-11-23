@@ -18,6 +18,7 @@ from sqlmodel import Session, select
 from app.db.database import engine
 from app.db.migrations import upgrade_schema
 from app.db.models import User
+from app.services.password_reset_service import cancel_unused_tokens
 from security.password_policy import password_problem
 from security.passwords import hash_password
 
@@ -34,6 +35,7 @@ def reset(username: str, password: str, temporary: bool) -> User:
         user.hashed_password = hash_password(password)
         user.must_change_password = temporary
         user.token_version += 1
+        cancel_unused_tokens(session, user.id)  # old reset links stop working
         session.add(user)
         session.commit()
         session.refresh(user)

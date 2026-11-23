@@ -1,6 +1,6 @@
 from datetime import datetime, timezone
 from sqlmodel import SQLModel, Field
-from sqlalchemy import CheckConstraint
+from sqlalchemy import CheckConstraint, Index
 
 class SearchRecord(SQLModel, table=True):
     """Stores each Wikipedia search and its results."""
@@ -42,6 +42,8 @@ class User(SQLModel, table=True):
 
     __table_args__ = (
         CheckConstraint("role IN ('admin', 'user')", name="ck_user_role"),
+        # Unique when set; SQLite allows many NULLs. Same name as in migrations.
+        Index("ux_user_email", "email", unique=True),
     )
 
     id: int | None = Field(default=None, primary_key=True)
@@ -59,3 +61,18 @@ class User(SQLModel, table=True):
     # Set when an admin resets the password: the user must choose a new one
     # before using anything else (enforced in get_current_user).
     must_change_password: bool = Field(default=False, nullable=False)
+    # Where password-reset links go. Stored trimmed and lowercase; set by
+    # admins only, so a stolen session cannot redirect recovery.
+    email: str | None = None
+
+
+class PasswordResetToken(SQLModel, table=True):
+    """One-time password-reset link. Only the SHA-256 of the token is stored."""
+
+    id: int | None = Field(default=None, primary_key=True)
+    user_id: int = Field(foreign_key="user.id", index=True, nullable=False)
+    token_hash: str = Field(unique=True, nullable=False)
+    created_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
+    expires_at: datetime = Field(nullable=False)
+    used_at: datetime | None = None  # also set when the token is cancelled
+    requested_ip: str | None = None

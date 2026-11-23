@@ -15,11 +15,23 @@ from app.db.database import get_session
 from app.db.models import SearchRecord, User
 from app.dto.auth_models import UserPublic
 from app.dto.user_models import PasswordReset, UserCreate, UserUpdate
+from app.services.password_reset_service import cancel_unused_tokens, delete_tokens
 from security.password_policy import password_problem
 from security.passwords import hash_password
 
 router = APIRouter(prefix="/users", tags=["User management"])
 logger = logging.getLogger(__name__)
+
+EMAIL_TAKEN = "Email already in use"
+
+
+def _email_taken(session: Session, email: str | None, except_id: int | None = None) -> bool:
+    if email is None:
+        return False
+    statement = select(User.id).where(User.email == email)
+    if except_id is not None:
+        statement = statement.where(User.id != except_id)
+    return session.exec(statement).first() is not None
 
 
 MAX_PAGE_SIZE = 50
@@ -77,9 +89,12 @@ def create_user(
     admin: Annotated[User, Depends(require_admin)],
     session: Annotated[Session, Depends(get_session)],
 ):
+    if _email_taken(session, payload.email):
+        raise HTTPException(status_code=409, detail=EMAIL_TAKEN)
     user = User(
         username=payload.username,
         full_name=payload.full_name,
+        email=payload.email,
         hashed_password=hash_password(payload.password),
         role=payload.role,
         is_active=True,
@@ -92,7 +107,9 @@ def create_user(
         session.commit()
     except IntegrityError as exc:
         session.rollback()
-        raise HTTPException(status_code=409, detail="Username already exists") from exc
+        # Lost a race on the email, or the username already exists.
+        detail = EMAIL_TAKEN if _email_taken(session, payload.email) else "Username already exists"
+        raise HTTPException(status_code=409, detail=detail) from exc
     session.refresh(user)
     return user
 
@@ -132,10 +149,17 @@ def update_user(
         if other_active_admins is None:
             raise HTTPException(status_code=400, detail="At least one active admin must remain")
 
+    if "email" in changes and _email_taken(session, changes["email"], except_id=target.id):
+        raise HTTPException(status_code=409, detail=EMAIL_TAKEN)
+
     for field, value in changes.items():
         setattr(target, field, value)
     session.add(target)
-    session.commit()
+    try:
+        session.commit()
+    except IntegrityError as exc:  # lost a race on the email
+        session.rollback()
+        raise HTTPException(status_code=409, detail=EMAIL_TAKEN) from exc
     session.refresh(target)
     return target
 
@@ -166,6 +190,7 @@ def reset_password(
     target.hashed_password = hash_password(payload.new_password)
     target.must_change_password = True
     target.token_version += 1
+    cancel_unused_tokens(session, target.id)  # PWR-10: old reset links stop working
     session.add(target)
     session.commit()
     session.refresh(target)
@@ -202,5 +227,6 @@ def delete_user(
     session.execute(
         update(SearchRecord).where(SearchRecord.user_id == target.id).values(user_id=None)
     )
+    delete_tokens(session, target.id)  # PWR-18
     session.delete(target)
     session.commit()

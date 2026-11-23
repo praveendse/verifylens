@@ -56,7 +56,15 @@ login_ip_limiter = RateLimiter(_settings.login_attempts_per_ip_per_minute, 60)
 login_user_limiter = RateLimiter(_settings.login_attempts_per_username_per_minute, 60)
 search_limiter = RateLimiter(_settings.searches_per_user_per_minute, 60)
 password_change_limiter = RateLimiter(_settings.login_attempts_per_username_per_minute, 60)
-ALL_LIMITERS = (login_ip_limiter, login_user_limiter, search_limiter, password_change_limiter)
+# Password recovery (spec PWR-11). The per-account limit is applied after the
+# response (see password_reset_routes) so it can't reveal which accounts exist.
+reset_request_ip_limiter = RateLimiter(5, 60)
+reset_request_account_limiter = RateLimiter(3, 15 * 60)
+reset_confirm_ip_limiter = RateLimiter(10, 60)
+ALL_LIMITERS = (
+    login_ip_limiter, login_user_limiter, search_limiter, password_change_limiter,
+    reset_request_ip_limiter, reset_request_account_limiter, reset_confirm_ip_limiter,
+)
 
 
 def _too_many(retry_after: float, message: str) -> HTTPException:
@@ -94,6 +102,19 @@ def limit_password_change(
     wait = password_change_limiter.hit(f"user:{current_user.id}")
     if wait is not None:
         raise _too_many(wait, "Too many password change attempts. Please wait a minute and try again.")
+
+
+def limit_reset_request(request: Request) -> None:
+    wait = reset_request_ip_limiter.hit(client_ip(request))
+    if wait is not None:
+        raise _too_many(wait, "Too many password reset requests. Please wait a minute and try again.")
+
+
+def limit_reset_confirm(request: Request) -> None:
+    """Stops guessing reset tokens from one address."""
+    wait = reset_confirm_ip_limiter.hit(client_ip(request))
+    if wait is not None:
+        raise _too_many(wait, "Too many attempts. Please wait a minute and try again.")
 
 
 def limit_search(current_user: Annotated[User, Depends(get_current_user)]) -> None:

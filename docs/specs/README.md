@@ -30,7 +30,7 @@ A PR that changes behaviour without changing a spec is incomplete.
 | [admin-overview.md](admin-overview.md) | Admin dashboard numbers | FR-11 |
 | [platform.md](platform.md) | Health, startup secrets, database, backups, frontend serving | FR-12, NFR-03, NFR-08 |
 | [frontend.md](frontend.md) | React app | FR-06 |
-| [password-recovery.md](password-recovery.md) | **Proposed:** self-service reset by email link | New. Out of scope in PHX-433, needs approval |
+| [password-recovery.md](password-recovery.md) | Self-service reset by email link. **Built, off by default; not yet tried with a real mail server** | New. Out of scope in PHX-433, needs approval before it is switched on |
 
 ## Conventions
 

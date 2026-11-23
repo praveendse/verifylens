@@ -300,6 +300,14 @@ h1, h2, h3 { font-family: inherit; }
 }
 .password-field button:hover { background: var(--btn-soft-hover); border-color: var(--btn-soft-border-hover); color: var(--forest); }
 .login-submit { width: 100%; margin-top: 15px; }
+/* Text-style button: "Forgot password?", "Back to sign in". */
+.link-button {
+  display: inline-flex; align-items: center; gap: 6px; padding: 2px 0; border: 0; background: none;
+  color: var(--forest); font-size: 13px; font-weight: 600; cursor: pointer;
+}
+.link-button:hover { text-decoration: underline; }
+.link-button:focus-visible { outline: 2px solid var(--forest); outline-offset: 3px; border-radius: 4px; }
+.recovery-actions { justify-content: space-between; flex-wrap: wrap; margin-top: 22px; }
 .login-bottom-note { display: flex; align-items: center; justify-content: center; gap: 9px; margin-top: 36px; padding-top: 25px; border-top: 1px solid var(--border); font-size: 13px; color: var(--subtle); }
 .login-copyright { position: absolute; bottom: 18px; font-size: 13px; color: var(--subtle); }
 .demo-callout {

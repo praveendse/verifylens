@@ -138,7 +138,12 @@ export default function UserSearch({ id, search, selected, onChange, placeholder
         disabled={disabled}
         maxLength={100}
         value={query}
-        onChange={event => { setQuery(event.target.value); setActive(0); setOpen(true); }}
+        onChange={event => {
+          const value = event.target.value;
+          setQuery(value); setActive(0); setOpen(true);
+          // Emptying the field is the same as pressing clear: drop the selection.
+          if (!value.trim() && selected) onChange(null);
+        }}
         onFocus={event => event.target.select()}
         onKeyDown={onKeyDown}
       />

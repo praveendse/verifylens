@@ -10,6 +10,7 @@ from app.api.rate_limit import limit_login, limit_password_change
 from app.db.database import get_session
 from app.db.models import User
 from app.dto.auth_models import AccessToken, PasswordChange, UserPublic
+from app.services.password_reset_service import cancel_unused_tokens
 from security.password_policy import password_problem
 from security.passwords import hash_password, verify_password
 from security.tokens import create_access_token
@@ -71,6 +72,7 @@ def change_password(
     current_user.hashed_password = hash_password(payload.new_password)
     current_user.must_change_password = False
     current_user.token_version += 1
+    cancel_unused_tokens(session, current_user.id)  # PWR-10: old reset links stop working
     session.add(current_user)
     session.commit()
     session.refresh(current_user)
