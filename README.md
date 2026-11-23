@@ -264,7 +264,7 @@ It has **not been tested yet**.
 ## 7. Testing & Verification
 
 **Automated results (run 2026-11-23, Linux, Python 3.12.16, pytest 9.2.0):
-169 passed, 0 failed, 35.7 s.**
+218 passed, 0 failed, 54.3 s.**
 
 | Area | Test files |
 |---|---|
@@ -280,8 +280,9 @@ redirects the app away from `data/` before any import. Requests go through the
 real login, so role and ownership rules are tested end to end inside the API.
 Wikipedia and Gemini are always replaced by fakes, mocks or offline stubs.
 
-**Frontend.** `npm run build` (Vite 7.3.8) succeeded on 2026-11-23. There are
-no automated frontend tests.
+**Frontend.** `npm run build` (Vite 7.3.8) succeeded on 2026-11-23.
+`npm test` (Vitest): 33 passed, covering the password-recovery screens and
+admin email fields only. The rest of the UI has no automated tests.
 
 **Live Gemini evidence.** `scripts/model_compare.py` (2026-11-22) called the
 real Wikipedia and Gemini for 40 labelled cases. The final run scored 40/40.

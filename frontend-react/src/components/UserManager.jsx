@@ -47,6 +47,7 @@ export default function UserManager({ onSearch, currentUserId, onUpdate, onDelet
   const [selected, setSelected] = useState(null);
   const [resetting, setResetting] = useState(false);
   const [fullName, setFullName] = useState('');
+  const [email, setEmail] = useState('');
   const [role, setRole] = useState('user');
   const [active, setActive] = useState(true);
   const [confirming, setConfirming] = useState(false);
@@ -55,9 +56,10 @@ export default function UserManager({ onSearch, currentUserId, onUpdate, onDelet
 
   useEffect(() => {
     setFullName(selected?.full_name ?? '');
+    setEmail(selected?.email ?? '');
     setRole(selected?.role ?? 'user');
     setActive(selected?.is_active ?? true);
-  }, [selected?.id, selected?.full_name, selected?.role, selected?.is_active]);
+  }, [selected?.id, selected?.full_name, selected?.email, selected?.role, selected?.is_active]);
 
   const search = useCallback(async q => {
     const page = await onSearch(q);
@@ -67,6 +69,7 @@ export default function UserManager({ onSearch, currentUserId, onUpdate, onDelet
   const isSelf = selected?.id === currentUserId;
   const changed = selected && (
     fullName.trim() !== (selected.full_name ?? '') ||
+    email.trim() !== (selected.email ?? '') ||
     role !== selected.role || active !== selected.is_active
   );
 
@@ -84,6 +87,7 @@ export default function UserManager({ onSearch, currentUserId, onUpdate, onDelet
     if (!selected || !changed || busy) return;
     const payload = {};
     if (fullName.trim() !== (selected.full_name ?? '')) payload.full_name = fullName.trim() || null;
+    if (email.trim() !== (selected.email ?? '')) payload.email = email.trim() || null;
     if (!isSelf && role !== selected.role) payload.role = role;
     if (!isSelf && active !== selected.is_active) payload.is_active = active;
     if (!Object.keys(payload).length) return;
@@ -97,7 +101,7 @@ export default function UserManager({ onSearch, currentUserId, onUpdate, onDelet
         <span className="panel-heading-icon"><UserCog size={20} /></span>
         <div>
           <h2 id="manage-account-title">Edit existing account</h2>
-          <p>Update names, roles and account access using the admin-only API.</p>
+          <p>Update names, emails, roles and account access using the admin-only API.</p>
         </div>
       </div>
       <form className="user-manager-form" onSubmit={save}>
@@ -115,6 +119,10 @@ export default function UserManager({ onSearch, currentUserId, onUpdate, onDelet
             <div>
               <label htmlFor="manage-name">Full name</label>
               <input id="manage-name" maxLength={100} value={fullName} onChange={event => setFullName(event.target.value)}/>
+            </div>
+            <div className="user-manager-email">
+              <label htmlFor="manage-email">Email (for password reset)</label>
+              <input id="manage-email" type="email" maxLength={254} autoComplete="off" value={email} onChange={event => setEmail(event.target.value)}/>
             </div>
             <div>
               <label htmlFor="manage-role">Role</label>

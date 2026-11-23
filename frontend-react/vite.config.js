@@ -12,4 +12,10 @@ export default defineConfig({
       },
     },
   },
+  test: {
+    environment: 'jsdom',
+    globals: true, // lets Testing Library clean up between tests
+    restoreMocks: true,
+    setupFiles: ['./src/test-setup.js'],
+  },
 });

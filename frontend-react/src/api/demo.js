@@ -174,10 +174,14 @@ export const demo = {
   async createUser(_token, body) {
     await delay();
     if (users.some(u => u.username === body.username)) throw new Error('Username already exists.');
-    const newUser = { id: nextUserId++, username: body.username, full_name: body.full_name, role: body.role, is_active: true };
+    const newUser = { id: nextUserId++, username: body.username, full_name: body.full_name, role: body.role, is_active: true, email: body.email ?? null };
     users.push(newUser);
     return newUser;
   },
+  // Password reset needs real email, so it is off in preview mode.
+  async passwordResetStatus() { return false; },
+  async requestPasswordReset() { throw new Error('Password reset is not available in preview mode.'); },
+  async confirmPasswordReset() { throw new Error('Password reset is not available in preview mode.'); },
   /** Preview mode has no backend, so nothing is actually checked: report that honestly. */
   async systemStatus() {
     await delay(150);

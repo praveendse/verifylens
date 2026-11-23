@@ -67,6 +67,19 @@ export const api = {
   resetUserPassword: (token, userId, newPassword) => call(`/users/${encodeURIComponent(userId)}/password`, {
     method: 'POST', token, body: { new_password: newPassword },
   }),
+  /** Whether self-service password reset is switched on. False if off, missing or unreachable. */
+  async passwordResetStatus() {
+    try { return (await call('/auth/password-reset/status'))?.enabled === true; }
+    catch { return false; }
+  },
+  /** Always "accepted" for any account, so it can't reveal which accounts exist. */
+  requestPasswordReset: (identifier) => call('/auth/password-reset/request', {
+    method: 'POST', body: { identifier },
+  }),
+  /** Sets the new password. Does not sign in: the user signs in afterwards. */
+  confirmPasswordReset: (token, newPassword) => call('/auth/password-reset/confirm', {
+    method: 'POST', body: { token, new_password: newPassword },
+  }),
   search: (token, topic) => call('/search', { method: 'POST', token, body: { topic } }),
   /**
    * One page of history, newest first. Asks for one extra row to learn whether

@@ -8,6 +8,8 @@ import HistoryPage from './components/HistoryPage.jsx';
 import AdminPage from './components/AdminPage.jsx';
 import AdminOverview from './components/AdminOverview.jsx';
 import { ForcePasswordChange } from './components/PasswordForms.jsx';
+import { ForgotPasswordPage, ResetPasswordPage } from './components/PasswordRecovery.jsx';
+import { clearResetToken, readResetToken } from './resetLink.js';
 
 const isDemo = import.meta.env.VITE_DEMO_MODE === 'true';
 const service = isDemo ? demo : api;
@@ -50,8 +52,23 @@ export default function App() {
   const [overviewError, setOverviewError] = useState('');
   const [userError, setUserError] = useState('');
   const [userSuccess, setUserSuccess] = useState('');
+  // Signed-out screens: sign in, "forgot password", or the reset page opened
+  // from an email link. The link's token is kept in memory only.
+  const [resetToken, setResetToken] = useState(() => readResetToken());
+  const [authView, setAuthView] = useState(() => (readResetToken() ? 'reset' : 'login'));
+  const [authNotice, setAuthNotice] = useState('');
+  const [resetEnabled, setResetEnabled] = useState(false);
+
+  // Take the token out of the address bar and history (spec PWR-17).
+  useEffect(() => { if (readResetToken()) clearResetToken(); }, []);
+  useEffect(() => {
+    let live = true;
+    service.passwordResetStatus().then(on => { if (live) setResetEnabled(on); });
+    return () => { live = false; };
+  }, []);
 
   const logout = useCallback(() => {
+    setAuthView('login'); setAuthNotice('');
     setSession(null); setSection('verify'); setResult(null); setHistory([]); setUsers([]);
     setUsersHasMore(false); setUsersTotal(null); setOverview(null); setOverviewError('');
     setHistoryHasMore(false); setHistoryStats(null); setHistoryFilter(NO_FILTER);
@@ -79,7 +96,7 @@ export default function App() {
       const data = await service.login(username, password);
       if (!['admin','user'].includes(data?.user?.role)) throw new Error('The backend returned an unsupported user role.');
       // Admins land on the overview; everyone else on Verify.
-      setSession(data); setSection(data.user.role === 'admin' ? 'overview' : 'verify');
+      setSession(data); setSection(data.user.role === 'admin' ? 'overview' : 'verify'); setAuthNotice('');
     } catch (err) { setAuthError(err.message || 'Could not sign in.'); }
     finally { setAuthBusy(false); }
   };
@@ -273,7 +290,34 @@ export default function App() {
     catch (err) { return errorMessage(err); }
   };
 
-  if (!session) return <LoginPage onLogin={login} busy={authBusy} error={authError} isDemo={isDemo}/>;
+  /* Password recovery. Both return '' or an error message for the form. */
+  const requestReset = async identifier => {
+    try { await service.requestPasswordReset(identifier); return ''; }
+    catch (err) { return err?.message || 'Could not send the request.'; }
+  };
+
+  const confirmReset = async newPassword => {
+    try {
+      await service.confirmPasswordReset(resetToken, newPassword);
+      setResetToken(null); setAuthError('');
+      setAuthNotice('Password updated. Sign in with your new password.');
+      setAuthView('login');
+      return '';
+    } catch (err) { return err?.message || 'Could not reset the password.'; }
+  };
+
+  const showLogin = () => { setResetToken(null); setAuthView('login'); };
+
+  if (!session) {
+    if (authView === 'forgot') return <ForgotPasswordPage onSubmit={requestReset} onBack={showLogin}/>;
+    if (authView === 'reset' && resetToken) {
+      return <ResetPasswordPage onSubmit={confirmReset} onBack={showLogin}
+        onRequestNew={() => { setResetToken(null); setAuthView('forgot'); }}/>;
+    }
+    return <LoginPage onLogin={login} busy={authBusy} error={authError} isDemo={isDemo}
+      resetEnabled={resetEnabled} notice={authNotice}
+      onForgot={() => { setAuthNotice(''); setAuthError(''); setAuthView('forgot'); }}/>;
+  }
   if (session.user.must_change_password) return <ForcePasswordChange user={session.user} onSubmit={changePassword} onLogout={logout}/>;
   const canAdmin = session.user.role === 'admin';
   const selected = ['admin', 'overview'].includes(section) && !canAdmin ? 'verify' : section;

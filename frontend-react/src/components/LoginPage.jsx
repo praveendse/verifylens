@@ -2,7 +2,7 @@ import { useState } from 'react';
 import { ArrowRight, CheckCircle2, Fingerprint, LockKeyhole, SearchCheck, ShieldCheck, Users2 } from 'lucide-react';
 import Brand from './Brand.jsx';
 
-export default function LoginPage({ onLogin, busy, error, isDemo }) {
+export default function LoginPage({ onLogin, busy, error, isDemo, resetEnabled = false, onForgot, notice }) {
   const [username, setUsername] = useState('');
   const [password, setPassword] = useState('');
   const [showPassword, setShowPassword] = useState(false);
@@ -39,11 +39,12 @@ export default function LoginPage({ onLogin, busy, error, isDemo }) {
           <h2>Welcome back</h2>
           <p className="muted">Sign in to continue to your workspace.</p>
           {isDemo && <div className="demo-callout"><CheckCircle2 size={16} /><span><strong>Preview mode</strong> — use admin or researcher with password <code>demo123</code>. No real authentication or persistence.</span></div>}
+          {notice && <div className="alert alert-success" role="status">{notice}</div>}
           {error && <div className="alert alert-danger" role="alert">{error}</div>}
           <form onSubmit={submit} className="login-form">
             <label htmlFor="login-user">Username</label>
             <input id="login-user" autoComplete="username" placeholder="Enter your username" value={username} onChange={e => setUsername(e.target.value)} required />
-            <div className="label-between"><label htmlFor="login-password">Password</label><LockKeyhole size={14} /></div>
+            <div className="label-between"><label htmlFor="login-password">Password</label>{resetEnabled ? <button type="button" className="link-button" onClick={onForgot}>Forgot password?</button> : <LockKeyhole size={14} />}</div>
             <div className="password-field"><input id="login-password" autoComplete="current-password" type={showPassword ? 'text' : 'password'} placeholder="Enter your password" value={password} onChange={e => setPassword(e.target.value)} required /><button type="button" onClick={() => setShowPassword(v => !v)}>{showPassword ? 'Hide' : 'Show'}</button></div>
             <button className="primary-button login-submit" disabled={busy} type="submit">{busy ? 'Signing in…' : 'Sign in'} <ArrowRight size={17} /></button>
           </form>
