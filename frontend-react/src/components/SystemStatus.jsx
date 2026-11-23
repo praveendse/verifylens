@@ -12,8 +12,11 @@ const STAMP = new Intl.DateTimeFormat(undefined, { dateStyle: 'medium', timeStyl
  *   red              - a dependency is down, or the backend itself is unreachable
  *   grey             - checking, preview mode, or status unknown (e.g. session expired)
  * Never shows green without a successful check.
+ * detailed (admins): the pill opens a panel with each part and the last check.
+ * Otherwise only the plain-language pill is shown; the backend also leaves the
+ * per-part list out for non-admins.
  */
-export default function SystemStatus({ check }) {
+export default function SystemStatus({ check, detailed = false }) {
   const [state, setState] = useState({ phase: 'checking' });
   const [open, setOpen] = useState(false);
   const [now, setNow] = useState(Date.now());
@@ -73,6 +76,17 @@ export default function SystemStatus({ check }) {
   }, [open]);
 
   const view = describe(state);
+
+  if (!detailed) {
+    return (
+      <div className="sys-status">
+        <span className={`sys-status-trigger is-static tone-${view.tone}`}>
+          <span className="sys-led" aria-hidden="true"/>
+          <span className="sys-status-label" role="status" aria-live="polite">{view.label}</span>
+        </span>
+      </div>
+    );
+  }
   const checkedAt = state.phase === 'done' && state.data?.checked_at ? new Date(state.data.checked_at).getTime() : null;
 
   return (
@@ -97,7 +111,7 @@ export default function SystemStatus({ check }) {
                 <li key={c.name} className={`tone-${c.status === 'ok' ? 'ok' : 'down'}`}>
                   <span className="sys-dot" aria-hidden="true"/>
                   <span className="sys-name">{c.label}</span>
-                  <span className="sys-meta">{c.status === 'ok' ? `${c.latency_ms} ms` : (c.detail || 'Unavailable')}</span>
+                  <span className="sys-meta">{c.status === 'ok' ? `Working · ${c.latency_ms} ms` : `Not working${c.detail ? ` · ${c.detail}` : ''}`}</span>
                 </li>
               ))}
             </ul>
@@ -127,31 +141,35 @@ export default function SystemStatus({ check }) {
 
 function describe(state) {
   if (state.phase === 'checking') {
-    return { tone: 'idle', label: 'Checking systems…', components: [], note: 'Running live checks…', phaseNote: 'Checking…' };
+    return { tone: 'idle', label: 'Checking…', components: [], note: 'Running live checks…', phaseNote: 'Checking…' };
   }
   if (state.phase === 'error') {
     if (state.status === 0) {
-      return { tone: 'down', label: 'Backend unreachable', components: [], note: state.message, phaseNote: 'Last check failed' };
+      return { tone: 'down', label: "Can't reach the server", components: [], note: 'The app server is not answering. Check your connection, then try again.', phaseNote: 'Last check failed' };
     }
     if (state.status === 401 || state.status === 403) {
       return { tone: 'idle', label: 'Status unavailable', components: [], note: 'Your session has expired. Sign in again to see live status.', phaseNote: 'Not checked' };
     }
-    return { tone: 'down', label: 'Status check failed', components: [], note: state.message, phaseNote: 'Last check failed' };
+    return { tone: 'down', label: "Couldn't check status", components: [], note: 'The status check did not finish. Try again in a minute.', phaseNote: 'Last check failed' };
   }
   const data = state.data || {};
   if (data.status === 'demo') {
     return { tone: 'idle', label: 'Preview mode · live checks off', components: [], note: 'Preview mode has no backend, so Gemini, Wikipedia and the database are not checked.', phaseNote: 'Not checked' };
   }
+  // Admins get every part; other users only the overall status (empty list).
   const components = Array.isArray(data.components) ? data.components : [];
   const down = components.filter(c => c.status !== 'ok');
-  if (data.status === 'ok' && down.length === 0 && components.length > 0) {
-    return { tone: 'ok', label: 'All systems operational', components };
+  if (data.status === 'ok' && down.length === 0) {
+    return { tone: 'ok', label: 'Everything is working', components };
+  }
+  if (data.status !== 'degraded') {
+    return { tone: 'idle', label: 'Status unknown', components, note: 'No status to show yet.' };
   }
   const names = down.map(c => c.label);
-  const label = names.length === 0 ? 'Status unknown'
-    : names.length === 1 ? `${names[0]} unavailable`
-    : `${names.slice(0, -1).join(', ')} & ${names.at(-1)} unavailable`;
-  return { tone: names.length ? 'down' : 'idle', label, components };
+  const label = names.length === 0 ? "Some features aren't working right now"
+    : names.length === 1 ? `${names[0]} isn't working`
+    : `${names.slice(0, -1).join(', ')} and ${names.at(-1)} aren't working`;
+  return { tone: 'down', label, components, note: 'Some features may not work right now.' };
 }
 
 function countdown(ms) {
