@@ -31,6 +31,12 @@ INVALID = "Invalid or expired reset link"
 TOKEN_RE = re.compile(r"#token=([A-Za-z0-9_-]+)")
 
 
+def make_settings(**values) -> Settings:
+    """Settings from the given values and defaults only. Ignores the developer's
+    .env, so local settings (e.g. SMTP_STARTTLS=false) can't change test results."""
+    return Settings(_env_file=None, **values)
+
+
 def enabled_settings(**overrides) -> Settings:
     values = dict(
         password_reset_enabled=True,
@@ -39,7 +45,7 @@ def enabled_settings(**overrides) -> Settings:
         app_base_url=BASE_URL,
     )
     values.update(overrides)
-    return Settings(**values)
+    return make_settings(**values)
 
 
 class FakeMailer:
@@ -304,7 +310,7 @@ def test_token_expiry_follows_setting(api):
 def test_token_minutes_setting_is_bounded(minutes):
     """PWR-05"""
     with pytest.raises(ValidationError):
-        Settings(password_reset_token_minutes=minutes)
+        make_settings(password_reset_token_minutes=minutes)
 
 
 # ---------- PWR-07 .. PWR-09: confirm ----------
@@ -441,6 +447,24 @@ def test_identifier_limit_returns_202_but_stops_sending(api):
     assert len(mailer.sent) == 3
 
 
+def test_account_limit_counts_username_and_email_together(api):
+    """PWR-11: the limit is per account, so switching between username and
+    email neither doubles the emails nor hides one form behind the other."""
+    client, _, mailer, _ = api
+    for identifier in ("alice", "alice@example.com", "ALICE", "Alice@Example.com"):
+        assert request_reset(client, identifier).status_code == 202
+    assert len(mailer.sent) == 3
+
+
+def test_unknown_identifiers_do_not_use_up_an_accounts_limit(api):
+    """PWR-11: requests for other or unknown names don't count against Alice."""
+    client, _, mailer, _ = api
+    for name in ("ghost1", "ghost2", "ghost3"):
+        request_reset(client, name)
+    assert request_reset(client, "alice").status_code == 202
+    assert [to for to, *_ in mailer.sent] == ["alice@example.com"]
+
+
 def test_request_ip_limit_returns_429(api):
     """PWR-11"""
     client, *_ = api
@@ -474,10 +498,10 @@ def test_mail_failure_still_returns_202_and_logs_safely(api, caplog):
 # ---------- PWR-15: off unless configured ----------
 
 @pytest.mark.parametrize("settings", [
-    Settings(password_reset_enabled=False, smtp_host="smtp.test", smtp_from="a@b.co", app_base_url=BASE_URL),
-    Settings(password_reset_enabled=True, smtp_host=None, smtp_from="a@b.co", app_base_url=BASE_URL),
-    Settings(password_reset_enabled=True, smtp_host="smtp.test", smtp_from=None, app_base_url=BASE_URL),
-    Settings(password_reset_enabled=True, smtp_host="smtp.test", smtp_from="a@b.co", app_base_url=None),
+    make_settings(password_reset_enabled=False, smtp_host="smtp.test", smtp_from="a@b.co", app_base_url=BASE_URL),
+    make_settings(password_reset_enabled=True, smtp_host=None, smtp_from="a@b.co", app_base_url=BASE_URL),
+    make_settings(password_reset_enabled=True, smtp_host="smtp.test", smtp_from=None, app_base_url=BASE_URL),
+    make_settings(password_reset_enabled=True, smtp_host="smtp.test", smtp_from="a@b.co", app_base_url=None),
 ], ids=["disabled", "no-host", "no-from", "no-base-url"])
 def test_endpoints_are_404_unless_enabled_and_configured(api, settings):
     """PWR-15"""
@@ -500,8 +524,8 @@ def test_status_reports_enabled_when_configured(api):
 def test_config_problem_names_missing_settings():
     """PWR-15: used for the startup warning."""
     assert config_problem(enabled_settings()) is None
-    assert config_problem(Settings(password_reset_enabled=False)) is None  # off: nothing to warn about
-    problem = config_problem(Settings(password_reset_enabled=True, smtp_host=None, smtp_from=None,
+    assert config_problem(make_settings(password_reset_enabled=False)) is None  # off: nothing to warn about
+    problem = config_problem(make_settings(password_reset_enabled=True, smtp_host=None, smtp_from=None,
                                       app_base_url=None))
     for name in ("SMTP_HOST", "SMTP_FROM", "APP_BASE_URL"):
         assert name in problem

@@ -10,7 +10,7 @@ from app.api.rate_limit import (
     client_ip,
     limit_reset_confirm,
     limit_reset_request,
-    reset_request_identifier_limiter,
+    reset_request_account_limiter,
 )
 from app.db.database import get_session, get_session_factory
 from app.dto.auth_models import PasswordResetConfirm, PasswordResetRequest
@@ -49,13 +49,15 @@ def _process_request(
     """Runs after the response is sent, so the response looks and times the
     same whether or not an account matches. Never logs the token or link."""
     try:
-        if reset_request_identifier_limiter.hit(identifier) is not None:
-            logger.warning("Password reset request over the per-account limit (ip=%s); no email sent", ip)
-            return
         with session_factory() as session:
             user = svc.find_user(session, identifier)
             if user is None or not user.is_active or not user.email:
                 logger.info("Password reset requested (ip=%s): no eligible account", ip)
+                return
+            # Counted per account, so username and email share one limit.
+            if reset_request_account_limiter.hit(f"user:{user.id}") is not None:
+                logger.warning("Password reset over the per-account limit (user_id=%s, ip=%s); no email sent",
+                               user.id, ip)
                 return
             minutes = settings.password_reset_token_minutes
             raw = svc.issue_token(session, user, ip, minutes)

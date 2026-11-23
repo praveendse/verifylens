@@ -56,14 +56,14 @@ login_ip_limiter = RateLimiter(_settings.login_attempts_per_ip_per_minute, 60)
 login_user_limiter = RateLimiter(_settings.login_attempts_per_username_per_minute, 60)
 search_limiter = RateLimiter(_settings.searches_per_user_per_minute, 60)
 password_change_limiter = RateLimiter(_settings.login_attempts_per_username_per_minute, 60)
-# Password recovery (spec PWR-11). The per-identifier limit is applied after
-# the response (see password_reset_routes) so it can't reveal which accounts exist.
+# Password recovery (spec PWR-11). The per-account limit is applied after the
+# response (see password_reset_routes) so it can't reveal which accounts exist.
 reset_request_ip_limiter = RateLimiter(5, 60)
-reset_request_identifier_limiter = RateLimiter(3, 15 * 60)
+reset_request_account_limiter = RateLimiter(3, 15 * 60)
 reset_confirm_ip_limiter = RateLimiter(10, 60)
 ALL_LIMITERS = (
     login_ip_limiter, login_user_limiter, search_limiter, password_change_limiter,
-    reset_request_ip_limiter, reset_request_identifier_limiter, reset_confirm_ip_limiter,
+    reset_request_ip_limiter, reset_request_account_limiter, reset_confirm_ip_limiter,
 )
 
 
