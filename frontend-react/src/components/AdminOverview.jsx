@@ -1,4 +1,5 @@
-import { Activity, AlertTriangle, ArrowDownRight, ArrowUpRight, CheckCircle2, RefreshCw, Search, UserCheck, Users2, XCircle } from 'lucide-react';
+import { useState } from 'react';
+import { ArrowDownRight, ArrowUpRight, CheckCircle2, ChevronDown, ChevronUp, RefreshCw, Search, UserCheck, Users2 } from 'lucide-react';
 import ActivityChart from './ActivityChart.jsx';
 import StatsDonut from './StatsDonut.jsx';
 import { BarList, DetailList, MiniDonut, Sparkline } from './OverviewVisuals.jsx';
@@ -36,6 +37,20 @@ function Delta({ now, before, days }) {
   );
 }
 
+const FAILURES_SHOWN = 3; // latest failed searches shown before "Show more"
+
+/* Titled block of the page: heading, rule, then content. */
+function Section({ id, title, children }) {
+  return (
+    <section className="ov-section" aria-labelledby={id}>
+      <header className="ov-section-head">
+        <h2 id={id}>{title}</h2>
+      </header>
+      {children}
+    </section>
+  );
+}
+
 /* ring: a MiniDonut shown left of the number; details: exact counts under it. */
 function Tile({ icon: Icon, label, value, ring, visual, details, children }) {
   return (
@@ -55,6 +70,7 @@ function Tile({ icon: Icon, label, value, ring, visual, details, children }) {
 }
 
 export default function AdminOverview({ data, loading, error, onRefresh, onManageUsers }) {
+  const [allFailures, setAllFailures] = useState(false);
   const heading = (
     <div className="page-top-heading">
       <div><h1>Admin <span>overview.</span></h1><p>How the platform is being used, and what needs your attention.</p></div>
@@ -104,8 +120,8 @@ export default function AdminOverview({ data, loading, error, onRefresh, onManag
   const successParts = [
     { key: 'done', label: 'Completed', value: completed, color: 'var(--viz-match)',
       note: completed ? `${last.match} match · ${last.no_match} no match` : undefined },
-    { key: 'error', label: 'Errors', value: last.error, color: 'var(--viz-error)' },
-    ...(last.other ? [{ key: 'other', label: 'Pending / other', value: last.other, color: 'var(--viz-other)' }] : []),
+    { key: 'error', label: 'Failed', value: last.error, color: 'var(--viz-error)' },
+    ...(last.other ? [{ key: 'other', label: 'Not finished', value: last.other, color: 'var(--viz-other)' }] : []),
   ];
   const activityParts = [
     { key: 'searched', label: 'Searched', value: last.active_users, color: 'var(--viz-series)' },
@@ -118,7 +134,8 @@ export default function AdminOverview({ data, loading, error, onRefresh, onManag
       <p className="ov-updated">Updated {ago(data.generated_at)} · days are counted in UTC</p>
       {error && <div className="alert alert-danger" role="alert">{error}</div>}
 
-      <section className="ov-tiles" aria-label="Key figures">
+      <Section id="ov-glance-title" title="At a glance">
+      <div className="ov-tiles">
         <Tile icon={Users2} label="Team members" value={users.total.toLocaleString()}
           ring={<MiniDonut label="Accounts" parts={accountParts}/>}
           details={<DetailList rows={accountParts}/>}>
@@ -142,13 +159,12 @@ export default function AdminOverview({ data, loading, error, onRefresh, onManag
           details={<DetailList rows={activityParts.map(p => (p.track ? { ...p, color: null } : p))}/>}>
           of {activeAccounts} active {activeAccounts === 1 ? 'account' : 'accounts'}
         </Tile>
-      </section>
+      </div>
+      </Section>
 
-      <section className={`admin-card ov-attention ${attention ? '' : 'is-clear'}`} aria-labelledby="ov-attention-title">
-        <div className="ov-attention-head">
-          <span className="ov-attention-icon">{attention ? <AlertTriangle size={18}/> : <CheckCircle2 size={18}/>}</span>
-          <div>
-            <h2 id="ov-attention-title">{attention ? 'Needs attention' : 'Nothing needs attention'}</h2>
+      <Section id="ov-attention-title" title="Needs attention">
+        <div className={`admin-card ov-attention ${attention ? '' : 'is-clear'}`}>
+          <div className="ov-attention-head">
             {attention ? (
               <ul className="ov-attention-list">
                 {idle.count > 0 && (
@@ -163,17 +179,17 @@ export default function AdminOverview({ data, loading, error, onRefresh, onManag
                 {users.inactive > 0 && <li><strong>{users.inactive}</strong> inactive {users.inactive === 1 ? 'account' : 'accounts'} (login blocked). Delete if no longer needed.</li>}
               </ul>
             ) : <p>Every active account has searched in the last {trendDays} days.</p>}
+            {attention && <button type="button" className="outline-button" onClick={onManageUsers}>Manage access</button>}
           </div>
-          {attention && <button type="button" className="outline-button" onClick={onManageUsers}>Manage access</button>}
         </div>
-      </section>
+      </Section>
 
+      <Section id="ov-trend-title" title="Search activity">
       <div className="ov-split">
         <section className="admin-card ov-card" aria-labelledby="ov-activity-title">
           <div className="ov-card-head">
-            <span className="panel-heading-icon"><Activity size={19}/></span>
             <div>
-              <h2 id="ov-activity-title">Search activity</h2>
+              <h2 id="ov-activity-title">Searches per day</h2>
               <p>{trendTotal.toLocaleString()} {trendTotal === 1 ? 'search' : 'searches'} in the last {trendDays} days, by outcome.</p>
             </div>
           </div>
@@ -181,11 +197,12 @@ export default function AdminOverview({ data, loading, error, onRefresh, onManag
         </section>
         <StatsDonut stats={outcome30} title={`Outcomes · ${trendDays} days`} compact/>
       </div>
+      </Section>
 
+      <Section id="ov-people-title" title="Users and failed searches">
       <div className="ov-pair">
         <section className="admin-card ov-card" aria-labelledby="ov-top-title">
           <div className="ov-card-head">
-            <span className="panel-heading-icon"><Users2 size={19}/></span>
             <div><h2 id="ov-top-title">Most active users</h2><p>Searches in the last {trendDays} days.</p></div>
           </div>
           <BarList
@@ -200,21 +217,20 @@ export default function AdminOverview({ data, loading, error, onRefresh, onManag
 
         <section className="admin-card ov-card" aria-labelledby="ov-errors-title">
           <div className="ov-card-head">
-            <span className="panel-heading-icon"><XCircle size={19}/></span>
-            <div><h2 id="ov-errors-title">Errors</h2><p>Most common causes in the last {trendDays} days, then the latest failures.</p></div>
+            <div><h2 id="ov-errors-title">Failed searches</h2><p>Most common reasons, then the latest failed searches.</p></div>
           </div>
           {data.error_causes.length > 0 && (
             <BarList
-              unit="errors"
+              unit="failed searches"
               color="var(--viz-error)"
-              items={data.error_causes.map(c => ({ key: c.code, label: c.label, sub: c.code !== c.label ? c.code : undefined, value: c.count }))}
+              items={data.error_causes.map(c => ({ key: c.code, label: c.label, value: c.count }))}
             />
           )}
           {data.recent_errors.length ? (
             <>
-              <h3 className="ov-subhead">Latest failures</h3>
-              <ul className="ov-list">
-                {data.recent_errors.map(e => (
+              <h3 className="ov-subhead">Latest failed searches</h3>
+              <ul className="ov-list" id="ov-failures">
+                {(allFailures ? data.recent_errors : data.recent_errors.slice(0, FAILURES_SHOWN)).map(e => (
                   <li key={e.id}>
                     <span className="ov-list-text">
                       <strong>{e.query}</strong>
@@ -224,10 +240,20 @@ export default function AdminOverview({ data, loading, error, onRefresh, onManag
                   </li>
                 ))}
               </ul>
+              {data.recent_errors.length > FAILURES_SHOWN && (
+                <div className="ov-more">
+                  <span>Showing {allFailures ? data.recent_errors.length : FAILURES_SHOWN} of {data.recent_errors.length}</span>
+                  <button type="button" className="outline-button" aria-controls="ov-failures" aria-expanded={allFailures}
+                    onClick={() => setAllFailures(v => !v)}>
+                    {allFailures ? <>Show less <ChevronUp size={16}/></> : <>Show more <ChevronDown size={16}/></>}
+                  </button>
+                </div>
+              )}
             </>
           ) : <div className="table-empty">No failed searches.</div>}
         </section>
       </div>
+      </Section>
     </div>
   );
 }

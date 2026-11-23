@@ -27,14 +27,15 @@ before it.
 
 ## Error labels
 
-| Code | Label |
-|---|---|
-| `GeminiVerificationError` | Gemini returned an unusable answer |
-| `GeminiUnavailableError` | Gemini unavailable (timeout or rate limit) |
-| `TimeoutError` | Timed out |
-| `PlaywrightTimeoutError` | Wikipedia page timed out |
-| `ValueError` | Invalid article or image |
-| `RuntimeError` | Download failed |
+Labels come from `app/services/search_errors.py` (`REASONS`), in plain words
+for non-technical admins. Records saved before error codes existed hold the
+exception class name; `LEGACY` maps those to a code, and `error_causes` merges
+rows that end up with the same label.
+
+The page uses plain words throughout: "Failed" instead of "Errors", "Not
+finished" instead of "Pending / other". Sections: At a glance, Needs attention,
+Search activity, Users and failed searches. The latest failed searches show 3
+rows with Show more / Show less (up to 8).
 
 ## Out of scope
 Custom date ranges, export, alerts, per-user drill-down from this endpoint.
@@ -43,5 +44,5 @@ Custom date ranges, export, alerts, per-user drill-down from this endpoint.
 1. Days are UTC. Do the admins expect their local day instead?
 2. `recent_errors` covers all time, while `error_causes` covers 30 days. Is
    that difference intended?
-3. `ValueError` covers both "missing Gemini key" and "no image found". Should
-   configuration errors get a separate code, so admins can tell them apart?
+3. A missing Gemini key still records `unknown`, not `setup`. Should the
+   pipeline raise `SearchFailure("setup")` for it?

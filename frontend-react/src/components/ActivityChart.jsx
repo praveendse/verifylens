@@ -77,8 +77,7 @@ export default function ActivityChart({ daily }) {
     <div className="activity-chart">
       <ul className="activity-legend">
         {CATEGORIES.filter(c => !c.optional || days.some(d => d[c.key])).map(c => {
-          const Icon = c.icon;
-          return <li key={c.key}><span className="activity-swatch" style={{ background: c.color }}/><Icon size={14} aria-hidden="true"/>{c.label}</li>;
+          return <li key={c.key}><span className="activity-swatch" style={{ background: c.color }}/>{c.label}</li>;
         })}
       </ul>
 
