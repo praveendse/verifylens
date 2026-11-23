@@ -1,4 +1,4 @@
-# VerifyLens - Wikipedia Image Verifier (Task 03, PHX-433)
+# VerifyLens - Wikipedia Image Verifier
 
 VerifyLens takes a Wikipedia topic, finds the article and its main image, and
 asks Google Gemini whether the image actually fits the article. It then
