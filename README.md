@@ -13,7 +13,7 @@ the real Wikipedia and Gemini services; see [Testing & Verification](#7-testing-
 
 ## 1. Project Overview
 
-**Objective (Jira PHX-433, "Database Writing and Login System").** Add login
+**Objective** Add login
 and role-based access to the FastAPI backend from Task 02. Add a React
 frontend. Store users, searches and reports in SQLite.
 
