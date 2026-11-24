@@ -12,8 +12,8 @@ from sqlalchemy import case, func
 from sqlmodel import Session, select
 
 from app.api.auth_dependencies import require_admin
-from app.db.database import get_session
-from app.db.models import SearchRecord, User
+from app.infra.db.database import get_session
+from app.infra.db.models import SearchRecord, User
 from app.dto.admin_models import (
     AdminOverviewResponse,
     DailyActivity,

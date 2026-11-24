@@ -11,8 +11,8 @@ from sqlalchemy.exc import IntegrityError
 from sqlmodel import Session, select
 
 from app.api.auth_dependencies import require_admin
-from app.db.database import get_session
-from app.db.models import SearchRecord, User
+from app.infra.db.database import get_session
+from app.infra.db.models import SearchRecord, User
 from app.dto.auth_models import UserPublic
 from app.dto.common import CountResponse
 from app.dto.user_models import PasswordReset, UserCreate, UserListQuery, UserUpdate

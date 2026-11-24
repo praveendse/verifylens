@@ -6,8 +6,8 @@ from fastapi import Depends, HTTPException, status
 from fastapi.security import OAuth2PasswordBearer
 from sqlmodel import Session
 
-from app.db.database import get_session
-from app.db.models import User
+from app.infra.db.database import get_session
+from app.infra.db.models import User
 from security.tokens import decode_access_claims
 
 bearer_scheme = OAuth2PasswordBearer(tokenUrl="/api/v1/auth/login")

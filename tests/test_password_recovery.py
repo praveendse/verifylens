@@ -15,9 +15,9 @@ from sqlalchemy import create_engine as sa_create_engine
 from sqlmodel import Session, SQLModel, create_engine, select
 
 from app.api.dependencies import get_mail_sender, get_settings
-from app.db.database import get_session, get_session_factory
-from app.db.migrations import upgrade_schema
-from app.db.models import PasswordResetToken, User
+from app.infra.db.database import get_session, get_session_factory
+from app.infra.db.migrations import upgrade_schema
+from app.infra.db.models import PasswordResetToken, User
 from app.main import app
 from app.services.password_reset_service import config_problem, purge_old_tokens
 from app.config import Settings

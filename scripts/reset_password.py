@@ -15,9 +15,9 @@ import sys
 
 from sqlmodel import Session, select
 
-from app.db.database import engine
-from app.db.migrations import upgrade_schema
-from app.db.models import User
+from app.infra.db.database import engine
+from app.infra.db.migrations import upgrade_schema
+from app.infra.db.models import User
 from app.services.password_reset_service import cancel_unused_tokens
 from security.password_policy import password_problem
 from security.passwords import hash_password

@@ -25,8 +25,8 @@ from fastapi.testclient import TestClient  # noqa: E402
 from sqlalchemy import insert  # noqa: E402
 from sqlmodel import Session, SQLModel, create_engine, select  # noqa: E402
 
-from app.db.database import get_session  # noqa: E402
-from app.db.models import SearchRecord, User  # noqa: E402
+from app.infra.db.database import get_session  # noqa: E402
+from app.infra.db.models import SearchRecord, User  # noqa: E402
 from app.dto.auth_models import UserPublic  # noqa: E402
 from app.main import app  # noqa: E402
 from security.passwords import hash_password  # noqa: E402

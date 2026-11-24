@@ -15,7 +15,7 @@ from fastapi import Depends, HTTPException, Request, status
 from fastapi.security import OAuth2PasswordRequestForm
 
 from app.api.auth_dependencies import get_authenticated_user, get_current_user
-from app.db.models import User
+from app.infra.db.models import User
 from app.config import Settings
 
 

@@ -2,7 +2,7 @@ import json
 
 from sqlalchemy import func, or_
 from sqlmodel import Session, select
-from app.db.models import SearchRecord
+from app.infra.db.models import SearchRecord
 from app.dto.history_models import HistoryStats
 
 

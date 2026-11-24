@@ -4,7 +4,7 @@ import pytest
 from sqlalchemy.exc import IntegrityError
 from sqlmodel import SQLModel, Session, create_engine, select
 
-from app.db.models import User
+from app.infra.db.models import User
 from security.passwords import hash_password, verify_password
 
 

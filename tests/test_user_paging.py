@@ -5,7 +5,7 @@ The fixture seeds superadmin, alice and bob (ids 1-3, in that order).
 """
 from sqlmodel import Session
 
-from app.db.models import User
+from app.infra.db.models import User
 from security.passwords import hash_password
 from test_history_paging import api, login  # noqa: F401  (api is a fixture)
 

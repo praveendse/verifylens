@@ -9,7 +9,7 @@ import logging
 
 from sqlalchemy import Engine, text
 
-from app.db import models  # noqa: F401  (registers tables on SQLModel.metadata)
+from app.infra.db import models  # noqa: F401  (registers tables on SQLModel.metadata)
 from sqlmodel import SQLModel
 
 logger = logging.getLogger(__name__)

@@ -4,7 +4,7 @@ Reuses the isolated temp-DB fixture and helpers from test_history_paging.
 """
 from sqlmodel import Session, select
 
-from app.db.models import SearchRecord, User
+from app.infra.db.models import SearchRecord, User
 from test_history_paging import add, api, login, user_id  # noqa: F401  (api is a fixture)
 
 

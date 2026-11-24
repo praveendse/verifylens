@@ -8,7 +8,7 @@ from datetime import datetime, timedelta, timezone
 
 from sqlmodel import Session
 
-from app.db.models import SearchRecord, User
+from app.infra.db.models import SearchRecord, User
 from test_history_paging import api, login, user_id  # noqa: F401  (api is a fixture)
 
 URL = "/api/v1/admin/overview"

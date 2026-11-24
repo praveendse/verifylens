@@ -6,8 +6,8 @@ from fastapi import APIRouter, Depends, HTTPException
 from sqlmodel import Session
 
 from app.api.dependencies import get_pipeline_service
-from app.db.database import get_session
-from app.db.repository import SearchRepository
+from app.infra.db.database import get_session
+from app.infra.db.repository import SearchRepository
 from app.dto.models import SearchRequest, SearchResponse
 from app.services.gemini_service import GeminiUnavailableError
 from app.services.search_errors import code_for, describe
@@ -15,7 +15,7 @@ from app.services.pipeline_service import PipelineService
 
 from app.api.auth_dependencies import get_current_user
 from app.api.rate_limit import limit_search
-from app.db.models import User
+from app.infra.db.models import User
 
 router = APIRouter(tags=["Search"])
 logger = logging.getLogger(__name__)

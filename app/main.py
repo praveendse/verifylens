@@ -4,8 +4,8 @@ from contextlib import asynccontextmanager
 from fastapi import FastAPI
 
 from security.secrets import validate_secrets
-from app.db.database import engine
-from app.db.migrations import upgrade_schema
+from app.infra.db.database import engine
+from app.infra.db.migrations import upgrade_schema
 from app.api.routes import router
 from app.frontend import mount_frontend
 from app.config import Settings

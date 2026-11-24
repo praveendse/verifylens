@@ -6,8 +6,8 @@ from fastapi.testclient import TestClient
 from sqlmodel import Session, SQLModel, create_engine, select
 
 from app.api.auth_routes import REFRESH_COOKIE
-from app.db.database import get_session
-from app.db.models import RefreshToken, User
+from app.infra.db.database import get_session
+from app.infra.db.models import RefreshToken, User
 from app.main import app
 from app.services import refresh_token_service as svc
 from security.passwords import hash_password

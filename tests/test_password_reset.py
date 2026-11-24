@@ -7,9 +7,9 @@ from sqlalchemy import create_engine as sa_create_engine
 from sqlmodel import Session, SQLModel, create_engine, select
 
 from app.api.dependencies import get_pipeline_service
-from app.db.database import get_session
-from app.db.migrations import upgrade_schema
-from app.db.models import User
+from app.infra.db.database import get_session
+from app.infra.db.migrations import upgrade_schema
+from app.infra.db.models import User
 from app.main import app
 from security.passwords import hash_password, verify_password
 from security.tokens import create_access_token

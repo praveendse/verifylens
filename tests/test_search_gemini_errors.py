@@ -6,7 +6,7 @@ Wikipedia or Gemini calls: the pipeline is replaced by a fake that raises).
 from sqlmodel import Session, select
 
 from app.api.dependencies import get_pipeline_service
-from app.db.models import SearchRecord
+from app.infra.db.models import SearchRecord
 from app.main import app
 from app.services.gemini_service import GeminiUnavailableError
 from test_history_paging import api, login  # noqa: F401  (api is a fixture)

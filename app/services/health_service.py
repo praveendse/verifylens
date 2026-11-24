@@ -22,7 +22,7 @@ from typing import Callable
 from sqlalchemy import text
 from sqlmodel import Session
 
-from app.db.database import engine
+from app.infra.db.database import engine
 from app.dto.models import ComponentStatus, SystemStatusResponse
 from app.config import Settings
 

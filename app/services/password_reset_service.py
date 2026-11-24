@@ -10,7 +10,7 @@ from datetime import datetime, timedelta, timezone
 from sqlalchemy import Engine, delete, or_, update
 from sqlmodel import Session, select
 
-from app.db.models import PasswordResetToken, User
+from app.infra.db.models import PasswordResetToken, User
 from app.dto.auth_models import MailContent
 from app.config import Settings
 

@@ -13,8 +13,8 @@ import re
 from sqlalchemy.exc import IntegrityError
 from sqlmodel import Session, select
 
-from app.db.database import create_db_and_tables, engine
-from app.db.models import User
+from app.infra.db.database import create_db_and_tables, engine
+from app.infra.db.models import User
 from security.passwords import hash_password
 
 

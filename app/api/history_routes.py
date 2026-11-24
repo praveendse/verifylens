@@ -6,9 +6,9 @@ from fastapi import APIRouter, Depends, HTTPException, Query, status as http_sta
 from sqlmodel import Session
 
 from app.api.auth_dependencies import get_current_user
-from app.db.database import get_session
-from app.db.models import SearchRecord, User
-from app.db.repository import SearchRepository
+from app.infra.db.database import get_session
+from app.infra.db.models import SearchRecord, User
+from app.infra.db.repository import SearchRepository
 from app.dto.history_models import HistoryDetail, HistoryItem, HistoryQuery, HistoryStats
 from app.services.search_errors import describe
 

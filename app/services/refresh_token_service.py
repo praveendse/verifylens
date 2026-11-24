@@ -11,7 +11,7 @@ from datetime import datetime, timedelta
 from sqlalchemy import Engine, delete, or_, update
 from sqlmodel import Session, select
 
-from app.db.models import RefreshToken, User
+from app.infra.db.models import RefreshToken, User
 from app.services.password_reset_service import _as_utc, hash_token, utcnow
 from app.config import Settings
 

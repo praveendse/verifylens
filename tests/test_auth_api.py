@@ -5,8 +5,8 @@ from fastapi.testclient import TestClient
 from sqlmodel import Session, SQLModel, create_engine, select
 
 from app.api.auth_dependencies import require_admin
-from app.db.database import get_session
-from app.db.models import User
+from app.infra.db.database import get_session
+from app.infra.db.models import User
 from app.main import app
 from security.passwords import hash_password
 

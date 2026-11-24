@@ -7,8 +7,8 @@ from sqlmodel import Session, SQLModel, create_engine, select
 
 from app.api import rate_limit
 from app.api.dependencies import get_pipeline_service
-from app.db.database import get_session
-from app.db.models import SearchRecord, User
+from app.infra.db.database import get_session
+from app.infra.db.models import SearchRecord, User
 from app.dto.models import ArticleDTO, LabelCheckResult, VerificationDTO
 from app.services.pipeline_service import PipelineResult
 from app.main import app

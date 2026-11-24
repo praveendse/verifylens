@@ -9,8 +9,8 @@ from sqlmodel import Session, select
 
 from app.api.auth_dependencies import get_authenticated_user
 from app.api.rate_limit import limit_login, limit_password_change, limit_refresh
-from app.db.database import get_session
-from app.db.models import User
+from app.infra.db.database import get_session
+from app.infra.db.models import User
 from app.dto.auth_models import AccessToken, PasswordChange, UserPublic
 from app.services import refresh_token_service as refresh_svc
 from app.services.password_reset_service import cancel_unused_tokens, utcnow

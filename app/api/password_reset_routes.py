@@ -12,7 +12,7 @@ from app.api.rate_limit import (
     limit_reset_request,
     reset_request_account_limiter,
 )
-from app.db.database import get_session, get_session_factory
+from app.infra.db.database import get_session, get_session_factory
 from app.dto.auth_models import PasswordResetConfirm, PasswordResetRequest, ResetAvailability
 from app.dto.common import MessageResponse
 from app.services import password_reset_service as svc
