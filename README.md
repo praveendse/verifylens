@@ -17,24 +17,11 @@ the real Wikipedia and Gemini services; see [Testing & Verification](#7-testing-
 and role-based access to the FastAPI backend from Task 02. Add a React
 frontend. Store users, searches and reports in SQLite.
 
-**In scope:** sign-in, two roles (Admin, User), admin user management,
-Wikipedia search with Gemini image verification, Markdown reports, and
-per-user search history.
-**Added beyond PHX-433 (needs scope approval, off by default):** self-service
-password reset by email link. See [docs/specs/password-recovery.md](docs/specs/password-recovery.md).
-**Out of scope:** self-registration, multi-server deployment, and public
-internet hosting.
+![In scope: sign-in, two roles (Admin, User), admin user management, Wikipedia search with Gemini image verification, Markdown reports, per-user search history. Added beyond PHX-433 (needs scope approval, off by default): self-service password reset by email link. Out of scope: self-registration, multi-server deployment, public internet hosting.](frontend-react/src/assets/In-Scope%20Features%20and%20Boundaries.png)
 
-| Layer | Technology |
-|---|---|
-| Frontend | React 19, Vite 7, `react-markdown` (`frontend-react/`) |
-| Backend | Python 3.12, FastAPI, Pydantic, Uvicorn (`app/`) |
-| Database | SQLite (WAL mode) through SQLModel / SQLAlchemy (`app/db/`) |
-| Scraping | Playwright with headless Chromium (`app/services/wikipedia_service.py`) |
-| AI verification | Google Gemini via `google-genai` (`app/services/gemini_service.py`) |
-| Security | PyJWT (HS256), Argon2 via `pwdlib` (`security/`) |
-| Tests | pytest, FastAPI `TestClient` (`tests/`); Vitest + React Testing Library (`frontend-react/src/__tests__/`) |
-| Packaging | `Dockerfile` and `docker-compose.yml` (written, **not yet built**) |
+Password reset spec: [docs/specs/password-recovery.md](docs/specs/password-recovery.md).
+
+The technology used in each layer is shown in the [architecture diagram](#3-system-architecture).
 
 ```text
 app/
@@ -96,37 +83,18 @@ acceptance criteria.
 | NFR-06 | Reliability | Each Gemini request is cut off after 75 s. Temporary errors (408/429/5xx) are retried with backoff. The total wait is capped at 2× the timeout. | ✅ Tested (mocked) |
 | NFR-07 | Reliability | Gemini output is validated against a JSON schema. Truncated, repetitive or over-long answers are rejected. | ✅ Tested (mocked) |
 | NFR-08 | Data safety | Schema changes at startup only add tables and columns. Online backup script provided. | ✅ Tested |
-| NFR-09 | Performance | Lists use keyset pagination capped at 50 rows. Admin overview uses aggregate queries. | ✅ Paging tested. `scripts/perf_test.py` exists; its results are not recorded here. |
+| NFR-09 | Performance | Lists use keyset pagination capped at 50 rows. Admin overview uses aggregate queries. | ✅ Paging tested. Measured up to 10,000 users and 100,000 searches; see [Performance](#7-testing--verification). |
 | NFR-10 | Testability | Tests use temporary databases and fake or stubbed Wikipedia and Gemini. They never touch `data/`. | ✅ Verified |
 
 ---
 
 ## 3. System Architecture
 
-```mermaid
-flowchart LR
-    B["Browser"] --> UI["React app<br/>frontend-react"]
-    UI -->|"/api/v1 + Bearer JWT"| API
+![System architecture: Browser (React 19, Vite 7) calls a reverse proxy over HTTPS, which forwards to one Uvicorn process (Python 3.12, Docker). API layer: static frontend, REST routes, security (PyJWT, Argon2), in-memory rate limiter. Service layer: search pipeline, Playwright scraper, Gemini verifier, report, health check, refresh tokens, password reset, mail. Data layer: SQLModel/SQLAlchemy over SQLite, which CLI scripts also use. Services call Wikipedia and Gemini over HTTPS and an SMTP server over STARTTLS](docs/images/architecture.png)
 
-    subgraph BE["FastAPI (single process)"]
-        API["Routes<br/>auth · users · search · history · admin"]
-        SEC["Auth dependencies<br/>JWT · roles · rate limits"]
-        P["PipelineService"]
-        W["Wikipedia service<br/>(Playwright Chromium)"]
-        G["Gemini service"]
-        R["Report service"]
-        REPO["SearchRepository"]
-    end
+Arrows point from caller to callee; each reply returns on the same connection. Most routes query the database directly; search, sessions and password reset go through services.
 
-    API --> SEC
-    API --> P
-    API --> REPO
-    P --> W --> WIKI["Wikipedia"]
-    P --> G --> GEM["Gemini API"]
-    P --> R
-    REPO --> DB[("SQLite<br/>user · searchrecord")]
-    API -->|"user management, overview"| DB
-```
+<sub>Source: [docs/images/architecture.py](docs/images/architecture.py) (also writes `architecture.svg`). Regenerate with `python docs/images/architecture.py`.</sub>
 
 In development, Vite serves React on `:5173` and forwards `/api` to FastAPI on
 `:8000`. In single-server mode, FastAPI serves the built app (`frontend-react/dist`)
@@ -141,6 +109,33 @@ on the same origin, so CORS is not needed.
 5. The Markdown report is generated. The record is updated to `SUCCESS` with the report, infobox fields (JSON) and verdict.
 6. The response returns the report. React renders it and offers a `.md` download.
    On failure, the record is marked `ERROR` (stores the exception type only) and the client gets 503 or 500 with the record ID.
+
+**API endpoints** (all under `/api/v1`; full schemas at `/docs`)
+
+| Method | Path | Access | Purpose |
+|---|---|---|---|
+| GET | `/health` | Public | Liveness check |
+| GET | `/health/systems` | User | Status of API, database, Gemini, Wikipedia |
+| POST | `/auth/login` | Public | Username + password form → access token, sets refresh cookie |
+| POST | `/auth/refresh` | Refresh cookie | New access token; rotates the cookie |
+| POST | `/auth/logout` | Refresh cookie | Ends this sign-in, clears the cookie |
+| GET | `/auth/me` | User* | Current user |
+| POST | `/auth/password` | User* | Change own password → new token and cookie |
+| GET | `/auth/password-reset/status` | Public | Whether email reset is enabled |
+| POST | `/auth/password-reset/request` | Public | Email a reset link (same reply for any account) |
+| POST | `/auth/password-reset/confirm` | Public (reset token) | Set a new password from the link |
+| POST | `/search` | User | Run a verification and save it |
+| GET | `/history` | User | Own searches (admins: all), paged and filterable |
+| GET | `/history/stats` | User | Outcome totals |
+| GET / DELETE | `/history/{record_id}` | Owner or admin | Read or delete one record |
+| GET / POST | `/users` | Admin | List (paged, searchable) or create accounts |
+| GET | `/users/count` | Admin | Number of accounts |
+| PATCH / DELETE | `/users/{user_id}` | Admin | Edit (name, role, active, email) or delete |
+| POST | `/users/{user_id}/password` | Admin | Set a temporary password |
+| GET | `/admin/overview` | Admin | KPIs, 30-day activity, top users, recent errors |
+
+\* Also allowed while a password change is pending; every other route then returns 403.
+`/auth/refresh` and `/auth/logout` also require the header `X-Requested-With: verifylens`.
 
 ---
 
@@ -177,9 +172,31 @@ requirement. Where the original motivation was not recorded, the table says so.
 Tables are created, and missing columns added, automatically at startup.
 Default location: `data/search_history.db` (override with `DATABASE_PATH`).
 
-**Authentication.** `POST /api/v1/auth/login` (OAuth2 password form) returns a
-JWT. Inactive users cannot sign in. Every request reloads the user, so a
-deactivated or deleted account loses access immediately.
+**Authentication.** Two tokens work together:
+
+| | Access token | Refresh token |
+|---|---|---|
+| Form | JWT (HS256), claims `sub`, `tv`, `iat`, `exp`, `iss`, `aud` | Random 256-bit value |
+| Lifetime | 30 min | Rotated on every use; sign-in ends after 8 h idle or 7 days total |
+| Where the client keeps it | React memory (never `localStorage`) | `HttpOnly`, `Secure`, `SameSite=Strict` cookie, path `/api/v1/auth` |
+| Server storage | None (stateless) | SHA-256 hash in `refreshtoken` |
+| Sent as | `Authorization: Bearer …` on every API call | Cookie, automatically, only to `/auth/*` |
+
+- `POST /api/v1/auth/login` (OAuth2 password form) returns the access token
+  and sets the refresh cookie. Inactive users cannot sign in.
+- Every request reloads the user, so a deactivated or deleted account loses
+  access immediately.
+- A password change or reset increases `token_version`. Every access and
+  refresh token issued before that stops working.
+- JavaScript cannot read the refresh cookie, so an XSS bug cannot steal a
+  long-lived sign-in. `SameSite=Strict` plus the required `X-Requested-With`
+  header stop other sites from using it (CSRF).
+- If an already-used refresh token is presented more than 30 s after it was
+  rotated, it was probably copied: all of that user's sign-ins are revoked.
+
+![Authentication sequence: login, access token expiry, silent refresh and retry, page reload restore, logout](docs/images/auth-flow.png)
+
+<sub>Source: [docs/images/auth-flow.mmd](docs/images/auth-flow.mmd). Regenerate with `npx @mermaid-js/mermaid-cli -i docs/images/auth-flow.mmd -o docs/images/auth-flow.png -b white -s 2`.</sub>
 
 **Authorization.**
 
@@ -329,6 +346,15 @@ It has **not been tested yet**.
 | Admin overview, system status, backups, frontend serving | `test_admin_overview`, `test_system_status`, `test_backup_db`, `test_frontend_serving` |
 | Password reset by email (fake mail sender), fake mail server | `test_password_recovery`, `test_dev_mail_catcher` |
 
+**Code coverage** (`pytest --cov=app --cov=security`, 2026-11-24): **95%** of
+statements in `app/` and `security/` (1,410 of 1,479). Lowest:
+`pipeline_service.py` 64% (the real scrape → Gemini wiring, replaced by fakes
+in tests), `dependencies.py` 71%, `database.py` 80%, `health_service.py` 88%.
+Not counted: `scripts/` (CLI and measurement tools; `bootstrap_admin` and
+`model_compare` have no tests).
+
+**Tools.** Backend: pytest with FastAPI `TestClient` (`tests/`). Frontend: Vitest with React Testing Library (`frontend-react/src/__tests__/`).
+
 **Strategy.** Each test uses a temporary SQLite database. `tests/conftest.py`
 redirects the app away from `data/` before any import. Requests go through the
 real login, so role and ownership rules are tested end to end inside the API.
@@ -338,7 +364,29 @@ Wikipedia and Gemini are always replaced by fakes, mocks or offline stubs.
 `npm test` (Vitest, run 2026-11-24): 55 passed, covering the password-recovery
 screens, admin email fields and overview, system status, the Find user clear
 behaviour, and session handling (silent refresh and retry, restore after
-reload, logout). The rest of the UI has no automated tests. `npm audit`: 0 vulnerabilities (2026-11-23).
+reload, logout). The rest of the UI has no automated tests. Coverage
+(`vitest --coverage`, v8): **46% of statements** (52% of lines, 38% of
+branches). `npm audit`: 0 vulnerabilities (2026-11-23).
+
+**Performance** (`python -m scripts.perf_test`, 2026-11-24, Intel i7-13620H
+laptop). In-process `TestClient`, SQLite, no network; 40 timed runs per case
+after 3 warm-ups. Median / p95 latency in ms:
+
+| Endpoint | 100 users / 1k searches | 1k / 10k | 10k / 100k |
+|---|---|---|---|
+| Users: first page (21 rows) | 11.5 / 12.4 | 4.9 / 6.5 | 7.7 / 12.5 |
+| Users: search, no match | 11.4 / 13.5 | 6.6 / 8.3 | 16.8 / 21.5 |
+| Users: count | 10.8 / 15.7 | 4.3 / 6.0 | 5.4 / 8.7 |
+| History: first page | 4.9 / 6.2 | 7.9 / 12.4 | 4.8 / 9.9 |
+| History: topic filter, no match | 5.1 / 6.5 | 14.2 / 26.9 | **81.1 / 89.0** |
+| History: stats | 4.3 / 5.9 | 12.8 / 20.5 | 45.2 / 47.7 |
+| *Old "load all users" (for comparison)* | 1.1 / 1.5 | 8.3 / 47.1 | **144.2 / 200.8** (1.45 MB) |
+
+Paged endpoints stay under ~20 ms with a constant response size (about 3 KB
+for users, under 1 KB for history) as data grows 100×; the old unpaged list grew to 144 ms and 1.45 MB. Slowest remaining
+case: a topic filter that matches nothing scans every row (81 ms at 100,000
+searches). **Not measured:** `POST /search` itself (its time is dominated by the
+Wikipedia and Gemini calls), concurrent users, and the network.
 
 **Live Gemini evidence.** `scripts/model_compare.py` (2026-11-22) called the
 real Wikipedia and Gemini for 40 labelled cases. The final run scored 40/40.
@@ -391,3 +439,26 @@ end-to-end test of the web app.
   Use `requirements-prod.txt` for a reproducible install.
 - Demo-mode UI text is still included in the production bundle. It is inactive
   when `VITE_DEMO_MODE=false`.
+
+---
+
+## 9. Future Work
+
+Each item follows from a limitation above or an open question in
+`docs/specs/`. None is scheduled.
+
+| Priority | Item | Why |
+|---|---|---|
+| High | Recorded browser end-to-end run, then automate it (e.g. Playwright tests of the React app) | FR-05 and FR-06 are not yet verified end to end; the frontend has 46% test coverage. |
+| High | Build and start the Docker image on the internal server | Packaging is written but never run. |
+| High | Configure logging (format, level, file or journal) | Audit lines and failed reset emails are currently invisible. |
+| Medium | Run searches as background jobs (queue + status polling) | A search holds one HTTP request open for the whole scrape and Gemini call; a dropped connection loses the result screen. |
+| Medium | Move to PostgreSQL and Redis-backed rate limits | Removes the single-process limit (SQLite writer, in-memory counters) so the app can scale out. |
+| Medium | Alembic migrations | Today's startup upgrades can only add tables and columns. |
+| Medium | Full-text index for history topic search | The "no match" filter scans all rows (81 ms at 100k searches). |
+| Medium | Pin all dependencies and run `pip-audit` in CI | `requirements.txt` is mostly unpinned; no Python vulnerability scan yet. |
+| Low | Use the Wikipedia API instead of page scraping, with scraping as a fallback | Less fragile to layout changes and faster. |
+| Low | Human-reviewed evaluation set for the Gemini verdict | The 40 labels are the author's own; closely related images can still be accepted. |
+| Low | Dummy password-hash check for unknown usernames | Equalises login timing so usernames can't be probed (auth spec, open question 3). |
+| Low | MFA for admin accounts | Admins can reset passwords and read every search. |
+| Low | Drop demo-mode code from production builds | Smaller bundle; no preview text in production. |

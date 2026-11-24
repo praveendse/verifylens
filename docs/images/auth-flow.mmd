@@ -1,0 +1,28 @@
+sequenceDiagram
+    participant U as React app
+    participant A as FastAPI
+    participant D as SQLite
+
+    U->>A: POST /auth/login (username, password)
+    A->>D: check Argon2 hash, store refresh token hash
+    A-->>U: access token (JSON) + Set-Cookie refresh token
+
+    U->>A: GET /history (Bearer access token)
+    A-->>U: 200 data
+
+    Note over U,A: 30 min later the access token has expired
+    U->>A: GET /history (expired token)
+    A-->>U: 401
+    U->>A: POST /auth/refresh (cookie + X-Requested-With)
+    A->>D: valid? mark old token replaced, store new hash
+    A-->>U: new access token + Set-Cookie new refresh token
+    U->>A: GET /history (new token), retried once
+    A-->>U: 200 data
+
+    Note over U,A: Page reload: memory is empty
+    U->>A: POST /auth/refresh (cookie)
+    A-->>U: new access token, then GET /auth/me restores the session
+
+    U->>A: POST /auth/logout (cookie)
+    A->>D: revoke this sign-in
+    A-->>U: 204 + cookie cleared
