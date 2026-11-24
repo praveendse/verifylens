@@ -14,7 +14,8 @@ from app.api.auth_dependencies import require_admin
 from app.db.database import get_session
 from app.db.models import SearchRecord, User
 from app.dto.auth_models import UserPublic
-from app.dto.user_models import PasswordReset, UserCreate, UserUpdate
+from app.dto.common import CountResponse
+from app.dto.user_models import PasswordReset, UserCreate, UserListQuery, UserUpdate
 from app.services import refresh_token_service as refresh_svc
 from app.services.password_reset_service import cancel_unused_tokens, delete_tokens
 from security.password_policy import password_problem
@@ -35,7 +36,6 @@ def _email_taken(session: Session, email: str | None, except_id: int | None = No
     return session.exec(statement).first() is not None
 
 
-MAX_PAGE_SIZE = 50
 MAX_SEARCH_TERMS = 5
 
 
@@ -57,9 +57,7 @@ def _matching(statement, q: str | None):
 def list_users(
     admin: Annotated[User, Depends(require_admin)],
     session: Annotated[Session, Depends(get_session)],
-    limit: Annotated[int, Query(ge=1, le=MAX_PAGE_SIZE)] = 20,
-    after_id: Annotated[int | None, Query(ge=1)] = None,
-    q: Annotated[str | None, Query(max_length=100)] = None,
+    params: Annotated[UserListQuery, Query()],
 ):
     """One page of accounts, oldest first.
 
@@ -67,13 +65,13 @@ def list_users(
     already has, so accounts created or deleted between page loads never cause
     duplicated or skipped rows (unlike OFFSET).
     """
-    statement = _matching(select(User), q)
-    if after_id is not None:
-        statement = statement.where(User.id > after_id)
-    return session.exec(statement.order_by(User.id).limit(limit)).all()
+    statement = _matching(select(User), params.q)
+    if params.after_id is not None:
+        statement = statement.where(User.id > params.after_id)
+    return session.exec(statement.order_by(User.id).limit(params.limit)).all()
 
 
-@router.get("/count")
+@router.get("/count", response_model=CountResponse)
 def count_users(
     admin: Annotated[User, Depends(require_admin)],
     session: Annotated[Session, Depends(get_session)],
@@ -81,7 +79,7 @@ def count_users(
 ):
     """Number of accounts (optionally matching q), for "Showing N of total"."""
     total = session.exec(_matching(select(func.count()).select_from(User), q)).one()
-    return {"total": total}
+    return CountResponse(total=total)
 
 
 @router.post("", response_model=UserPublic, status_code=status.HTTP_201_CREATED)

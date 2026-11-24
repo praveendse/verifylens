@@ -1,6 +1,5 @@
 """Rate limits on login and search (isolated temp DB, fake pipeline)."""
 from pathlib import Path
-from types import SimpleNamespace
 
 import pytest
 from fastapi.testclient import TestClient
@@ -10,6 +9,8 @@ from app.api import rate_limit
 from app.api.dependencies import get_pipeline_service
 from app.db.database import get_session
 from app.db.models import SearchRecord, User
+from app.dto.models import ArticleDTO, LabelCheckResult, VerificationDTO
+from app.services.pipeline_service import PipelineResult
 from app.main import app
 from security.passwords import hash_password
 
@@ -24,17 +25,17 @@ class FakePipeline:
         self.runs += 1
         report_path = work_dir / "report.md"
         report_path.write_text(f"# {topic}", encoding="utf-8")
-        return SimpleNamespace(
+        return PipelineResult(
             report_path=report_path,
-            article={
+            article=ArticleDTO.model_validate({
                 "title": topic,
                 "paragraph": "x",
                 "source_url": "https://en.wikipedia.org/wiki/Test",
                 "image_url": "https://example.com/i.jpg",
                 "fields": {},
-            },
-            verification={"description": "x", "matches": True, "reason": "x"},
-            labels={"status": "agrees", "matched_in": ["File name"]},
+            }),
+            verification=VerificationDTO.model_validate({"description": "x", "matches": True, "reason": "x"}),
+            labels=LabelCheckResult(status="agrees", matched_in=["File name"]),
             review_reason=None,
         )
 

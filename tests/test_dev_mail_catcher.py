@@ -11,7 +11,7 @@ def test_long_reset_link_is_printed_whole():
     link = reset_link("http://127.0.0.1:5173", TOKEN)
     msg = EmailMessage()
     msg["From"], msg["To"], msg["Subject"] = "noreply@x.test", "alice@example.com", "VerifyLens password reset"
-    msg.set_content(reset_email(link, 15)[1])
+    msg.set_content(reset_email(link, 15).body)
     raw = msg.as_bytes()
     assert b"=3D" in raw  # the wire format really is encoded (quoted-printable)
 

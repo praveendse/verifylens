@@ -38,6 +38,18 @@ class PasswordResetRequest(BaseModel):
         return value
 
 
+class ResetAvailability(BaseModel):
+    enabled: bool
+
+
+class MailContent(BaseModel):
+    """Subject and plain-text body of an outgoing email."""
+    model_config = ConfigDict(frozen=True)
+
+    subject: str
+    body: str
+
+
 class PasswordResetConfirm(BaseModel):
     token: str = Field(min_length=1, max_length=128)
     # No min_length here: the token is checked first (400), then the password

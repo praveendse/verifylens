@@ -8,6 +8,7 @@ from types import SimpleNamespace
 
 import pytest
 
+from app.dto.models import LabelCheckResult
 from app.services import pipeline_service
 from app.services.pipeline_service import PipelineService
 from app.settings import Settings
@@ -37,11 +38,11 @@ def make(calls, *, matches=True, article=ARTICLE):
         path.write_bytes(b"jpg")
         return path
 
-    def describer(image_path, **kw):
+    def describer(image_path, config):
         calls.append(("describe", None))
         return "A wrought-iron lattice tower."
 
-    def verifier(article, image_path, *, blind_description=None, **kw):
+    def verifier(article, image_path, config, *, blind_description=None):
         calls.append(("verify", blind_description))
         return {"description": blind_description or "A tall tower.", "matches": matches, "reason": "It is the tower."}
 
@@ -68,7 +69,7 @@ def test_thorough_mode_describes_blind_first_then_verifies_with_it(tmp_path):
     result = make(calls).generate_with_details("Eiffel Tower", tmp_path, mode="thorough")
 
     assert calls == [("describe", None), ("verify", "A wrought-iron lattice tower.")]
-    assert result.verification["description"] == "A wrought-iron lattice tower."
+    assert result.verification.description == "A wrought-iron lattice tower."
     report = result.report_path.read_text(encoding="utf-8")
     assert "Super mode (thorough, 2 Gemini calls)" in report and "image alone" in report
 
@@ -83,7 +84,7 @@ def test_label_check_runs_only_in_super_mode(tmp_path):
     super_mode = make([]).generate_with_details("Eiffel Tower", tmp_path / "t", mode="thorough")
 
     assert standard.labels is None
-    assert super_mode.labels == {"status": "agrees", "matched_in": ["File name"]}
+    assert super_mode.labels == LabelCheckResult(status="agrees", matched_in=["File name"])
     assert super_mode.review_reason is None
 
 
@@ -97,7 +98,7 @@ def test_standard_mode_never_flags_for_review(tmp_path):
 def test_disagreement_is_flagged_but_the_verdict_is_kept(tmp_path):
     result = make([], matches=False).generate_with_details("Eiffel Tower", tmp_path, mode="thorough")
 
-    assert result.verification["matches"] is False  # never overridden by the labels
+    assert result.verification.matches is False  # never overridden by the labels
     assert result.review_reason and "labels name the subject" in result.review_reason
     report = result.report_path.read_text(encoding="utf-8")
     assert "**Match Status: FAIL**" in report and "**Needs review:**" in report

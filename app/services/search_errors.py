@@ -5,6 +5,7 @@ shown to nobody directly: `describe()` turns it into a short label (admin
 overview) and a sentence telling the user what happened and what to try.
 Older records stored the exception class name, so those are mapped too.
 """
+from app.dto.models import ErrorReason
 
 
 class SearchFailure(Exception):
@@ -16,7 +17,7 @@ class SearchFailure(Exception):
 
 
 # code -> (short label, message for the person who searched)
-REASONS = {
+_TEXT = {
     "no_article": (
         "No matching article",
         "We couldn't find a Wikipedia article with that name. Check the spelling or try the full name.",
@@ -63,6 +64,8 @@ REASONS = {
     ),
 }
 
+REASONS = {code: ErrorReason(label=label, message=message) for code, (label, message) in _TEXT.items()}
+
 # Records saved before codes existed hold the exception class name.
 LEGACY = {
     "ValueError": "no_image",          # almost always a page with no article image
@@ -92,7 +95,7 @@ def code_for(exc: Exception) -> str:
     return "unknown"
 
 
-def describe(code: str | None) -> tuple[str, str]:
-    """(label, message) for a stored code; unknown values fall back safely."""
+def describe(code: str | None) -> ErrorReason:
+    """Label and message for a stored code; unknown values fall back safely."""
     code = LEGACY.get(code or "", code or "unknown")
     return REASONS.get(code, REASONS["unknown"])

@@ -4,7 +4,13 @@ from dataclasses import dataclass
 from playwright.sync_api import sync_playwright
 
 from app.settings import Settings
-from app.dto.models import ArticleDTO, VerificationDTO
+from app.dto.models import (
+    ArticleDTO,
+    GeminiConfig,
+    LabelCheckResult,
+    VerificationDTO,
+    VerificationMode,
+)
 
 from app.services.wikipedia_service import (
     scrape_article,
@@ -17,11 +23,11 @@ from app.services.report_service import generate_report
 @dataclass
 class PipelineResult:
     report_path: Path
-    article: dict
-    verification: dict
-    labels: dict | None    # label check result; None in standard mode
+    article: ArticleDTO
+    verification: VerificationDTO
+    labels: LabelCheckResult | None    # None in standard mode
     review_reason: str | None = None  # set when the two checks disagree
-    mode: str = "standard"  # "standard" (1 Gemini call) or "thorough" (2)
+    mode: VerificationMode = "standard"  # "standard" (1 Gemini call) or "thorough" (2)
 
 class PipelineService:
     """Coordinate the complete verification workflow."""
@@ -46,8 +52,8 @@ class PipelineService:
         self,
         topic: str,
         work_dir: Path,
-        mode: str = "standard",
-    ) -> "PipelineResult":
+        mode: VerificationMode = "standard",
+    ) -> PipelineResult:
         """Generate a verification report for a topic.
 
         mode="thorough" first asks Gemini to describe the image without the
@@ -73,13 +79,11 @@ class PipelineService:
                 article_data = self.scraper(page, topic)
 
                 # Validate Wikipedia data
-                article = ArticleDTO.model_validate(
-                    article_data
-                ).model_dump()
+                article = ArticleDTO.model_validate(article_data)
 
                 image_path = self.downloader(
                     page,
-                    article["image_url"],
+                    article.image_url,
                     work_dir / "downloads",
                 )
 
@@ -87,36 +91,29 @@ class PipelineService:
                 browser.close()
 
         # Step 2: Gemini verification (thorough: blind description first)
-        gemini = dict(
-            api_key=self.settings.gemini_api_key,
-            model=self.settings.gemini_model,
-            thinking_level=self.settings.gemini_thinking_level,
-            timeout_s=self.settings.gemini_timeout_seconds,
-        )
-        blind = self.describer(image_path, **gemini) if mode == "thorough" else None
+        gemini = GeminiConfig.from_settings(self.settings)
+        blind = self.describer(image_path, gemini) if mode == "thorough" else None
         verification_data = self.verifier(
             article,
             image_path,
+            gemini,
             blind_description=blind,
-            **gemini,
         )
 
-        # Validate Gemini response
-        verification = VerificationDTO.model_validate(
-            verification_data
-        ).model_dump()
+        # Validate Gemini response (a no-op when it is already a VerificationDTO)
+        verification = VerificationDTO.model_validate(verification_data)
 
         # Step 3 (Super mode only): label check, plain code independent of
         # Gemini, and the "needs review" flag when it and the verdict disagree.
         # Standard mode keeps the original behaviour.
         labels = review_reason = None
         if mode == "thorough":
-            labels = check_labels(article["title"], {
-                "caption": article["image_caption"],
-                "alt": article["image_alt"],
-                "file": article["image_file"],
+            labels = check_labels(article.title, {
+                "caption": article.image_caption,
+                "alt": article.image_alt,
+                "file": article.image_file,
             })
-            review_reason = needs_review(verification["matches"], labels["status"])
+            review_reason = needs_review(verification.matches, labels.status)
 
         # Step 4: Generate Markdown report
         report_path = self.reporter(

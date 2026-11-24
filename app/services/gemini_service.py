@@ -12,6 +12,8 @@ from google import genai
 from google.genai import errors as genai_errors
 from google.genai import types
 
+from app.dto.models import ArticleDTO, GeminiConfig, VerificationDTO
+
 logger = logging.getLogger(__name__)
 
 # --- Output limits -----------------------------------------------------------
@@ -27,7 +29,7 @@ MAX_DESCRIPTION_CHARS = 800
 # *level* with no fixed token count, so the limit has extra headroom; a
 # truncated answer is still detected (MAX_TOKENS) and retried. Only tokens
 # actually generated are billed, so the higher cap costs nothing by itself.
-DEFAULT_THINKING_LEVEL = "low"
+DEFAULT_THINKING_LEVEL = GeminiConfig.model_fields["thinking_level"].default
 LEGACY_THINKING_BUDGET = 1024  # gemini-2.x only: these models take a token budget
 MAX_OUTPUT_TOKENS = 4096
 
@@ -39,7 +41,7 @@ MAX_ATTEMPTS = 2
 # hours). Transient failures are retried with exponential backoff + jitter;
 # every attempt, including output retries above, shares one overall deadline
 # of TOTAL_BUDGET_FACTOR x timeout, so a user's search can't wait forever.
-DEFAULT_TIMEOUT_S = 75
+# The per-request timeout is GeminiConfig.timeout_s (default 75 s).
 TOTAL_BUDGET_FACTOR = 2
 TRANSPORT_RETRIES = 2            # so up to 3 requests per answer attempt
 BACKOFF_BASE_S = 2.0
@@ -200,7 +202,7 @@ def _validate_description(response) -> str:
     return description
 
 
-def _validate_result(response) -> dict:
+def _validate_result(response) -> VerificationDTO:
     """Parse and sanity-check a Gemini response. Raises GeminiVerificationError."""
     result = _parse_json(response)
 
@@ -226,7 +228,7 @@ def _validate_result(response) -> dict:
             f"Gemini reason too long ({len(reason.split())} words)"
         )
 
-    return {"description": description, "matches": result["matches"], "reason": reason}
+    return VerificationDTO(description=description, matches=result["matches"], reason=reason)
 
 
 def _ask(client, *, model: str, contents, config: types.GenerateContentConfig,
@@ -260,30 +262,23 @@ def _image_part(image_path: Path) -> types.Part:
     return types.Part.from_bytes(data=image_path.read_bytes(), mime_type=mime_type)
 
 
-def describe_image(
-    image_path: Path,
-    *,
-    api_key: str,
-    model: str,
-    thinking_level: str = DEFAULT_THINKING_LEVEL,
-    timeout_s: float = DEFAULT_TIMEOUT_S,
-) -> str:
+def describe_image(image_path: Path, config: GeminiConfig) -> str:
     """Thorough mode, call 1: describe the image without seeing the article.
 
     Same timeouts, retries and output checks as verify_image.
     """
-    if not api_key:
+    if not config.api_key:
         raise ValueError("Gemini API key not found")
-    config = types.GenerateContentConfig(
+    request_config = types.GenerateContentConfig(
         response_mime_type="application/json",
         response_schema=types.Schema.model_validate(DESCRIPTION_SCHEMA),
         max_output_tokens=MAX_OUTPUT_TOKENS,
-        thinking_config=thinking_config(model, thinking_level),
+        thinking_config=thinking_config(config.model, config.thinking_level),
     )
     return _ask(
-        genai.Client(api_key=api_key), model=model,
+        genai.Client(api_key=config.api_key), model=config.model,
         contents=[DESCRIBE_PROMPT, _image_part(image_path)],
-        config=config, timeout_s=timeout_s, validate=_validate_description,
+        config=request_config, timeout_s=config.timeout_s, validate=_validate_description,
     )
 
 
@@ -300,15 +295,12 @@ def _independent_view(blind_description: str | None) -> str:
 
 
 def verify_image(
-    article: dict,
+    article: ArticleDTO,
     image_path: Path,
+    config: GeminiConfig,
     *,
-    api_key: str,
-    model: str,
-    thinking_level: str = DEFAULT_THINKING_LEVEL,
-    timeout_s: float = DEFAULT_TIMEOUT_S,
     blind_description: str | None = None,
-) -> dict:
+) -> VerificationDTO:
     """Verify that the image shows the article's subject, using Gemini.
 
     With blind_description (thorough mode) the prompt includes the
@@ -319,12 +311,12 @@ def verify_image(
     GeminiVerificationError when its answer can't be trusted.
     """
 
-    if not api_key:
+    if not config.api_key:
         raise ValueError("Gemini API key not found")
 
     image_part = _image_part(image_path)
 
-    fields = article["fields"]
+    fields = article.fields
 
     # Convert dynamic infobox fields into readable text
     fields_text = "\n".join(
@@ -345,10 +337,10 @@ def verify_image(
 
     Article information:
 
-    Title: {article['title']}
+    Title: {article.title}
 
     First Paragraph:
-    {article['paragraph']}
+    {article.paragraph}
 
     Infobox Details:
     {fields_text}
@@ -393,19 +385,19 @@ def verify_image(
        and is consistent with your reason.
     """
 
-    config = types.GenerateContentConfig(
+    request_config = types.GenerateContentConfig(
         response_mime_type="application/json",
         # Validate locally so a typo in a schema key fails here instead of
         # being silently ignored by the API.
         response_schema=types.Schema.model_validate(RESPONSE_SCHEMA),
         max_output_tokens=MAX_OUTPUT_TOKENS,
-        thinking_config=thinking_config(model, thinking_level),
+        thinking_config=thinking_config(config.model, config.thinking_level),
     )
     result = _ask(
-        genai.Client(api_key=api_key), model=model,
-        contents=[prompt, image_part], config=config,
-        timeout_s=timeout_s, validate=_validate_result,
+        genai.Client(api_key=config.api_key), model=config.model,
+        contents=[prompt, image_part], config=request_config,
+        timeout_s=config.timeout_s, validate=_validate_result,
     )
     if blind_description:
-        result["description"] = blind_description
+        result = result.model_copy(update={"description": blind_description})
     return result
