@@ -112,9 +112,17 @@ on the same origin, so CORS is not needed.
 
 **Verification modes and label check** (spec SRCH-14, SRCH-15)
 
-![Verification modes: the scraped article, lead image and image labels feed three lanes. Standard mode, the default: one Gemini call sees image and article and returns description, reason and PASS/FAIL. Super mode (API value thorough): call 1 sees only the image and writes a blind description; call 2 sees image, article and that description and returns the verdict. Label check, plain code in Super mode only: do the caption, alt text or file name contain a title word. The result keeps Gemini's verdict; in Super mode it flags Needs review when the two disagree. Standard keeps the original report.](docs/images/verification.png)
+<!-- ![Verification modes: the scraped article, lead image and image labels feed three lanes. Standard mode, the default: one Gemini call sees image and article and returns description, reason and PASS/FAIL. Super mode (API value thorough): call 1 sees only the image and writes a blind description; call 2 sees image, article and that description and returns the verdict. Label check, plain code in Super mode only: do the caption, alt text or file name contain a title word. The result keeps Gemini's verdict; in Super mode it flags Needs review when the two disagree. Standard keeps the original report.](docs/images/verification.png)
 
-<sub>Source: [docs/images/verification.py](docs/images/verification.py). Regenerate with `python docs/images/verification.py`.</sub>
+<sub>Source: [docs/images/verification.py](docs/images/verification.py). Regenerate with `python docs/images/verification.py`.</sub> -->
+
+Pipeline per mode:
+
+![Standard mode: the image and the scraped details (title, first paragraph, infobox fields) go into one Gemini call, which describes the image and decides whether it shows the subject. Outputs: description, reason, PASS/FAIL.](docs/images/mode-standard.png)
+
+![Super mode: Gemini call 1 sees only the image and writes the blind description. Gemini call 2 sees the image, the scraped details and the blind description, and returns the reason and PASS/FAIL. Separately, plain code checks whether the image labels (caption, alt text, file name) contain a title word; if that disagrees with the verdict, the result is marked Needs review. The labels never reach Gemini.](docs/images/mode-super.png)
+
+<sub>Source: [docs/images/modes.py](docs/images/modes.py). Regenerate with `python docs/images/modes.py`.</sub>
 
 | | Standard (default) | Super mode (API: `thorough`) |
 |---|---|---|
