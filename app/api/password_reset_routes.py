@@ -13,7 +13,8 @@ from app.api.rate_limit import (
     reset_request_account_limiter,
 )
 from app.db.database import get_session, get_session_factory
-from app.dto.auth_models import PasswordResetConfirm, PasswordResetRequest
+from app.dto.auth_models import PasswordResetConfirm, PasswordResetRequest, ResetAvailability
+from app.dto.common import MessageResponse
 from app.services import password_reset_service as svc
 from app.services.mail_service import MailSender
 from app.settings import Settings
@@ -26,17 +27,17 @@ logger = logging.getLogger(__name__)
 REQUEST_ACCEPTED = "If an account matches, we've sent a link to reset the password. Check your email."
 INVALID_LINK = "Invalid or expired reset link"
 RESET_DONE = "Password updated. Please sign in with your new password."
-
+ 
 
 def require_reset_available(settings: Annotated[Settings, Depends(get_settings)]) -> None:
     if not svc.is_available(settings):
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Not Found")
 
 
-@router.get("/status")
+@router.get("/status", response_model=ResetAvailability)
 def reset_status(settings: Annotated[Settings, Depends(get_settings)]):
     """Lets the sign-in page decide whether to show "Forgot password?"."""
-    return {"enabled": svc.is_available(settings)}
+    return ResetAvailability(enabled=svc.is_available(settings))
 
 
 def _process_request(
@@ -62,8 +63,8 @@ def _process_request(
             minutes = settings.password_reset_token_minutes
             raw = svc.issue_token(session, user, ip, minutes)
             to, uid = user.email, user.id
-        subject, body = svc.reset_email(svc.reset_link(settings.app_base_url, raw), minutes)
-        mailer.send(to, subject, body)
+        mail = svc.reset_email(svc.reset_link(settings.app_base_url, raw), minutes)
+        mailer.send(to, mail.subject, mail.body)
         logger.info("Password reset link sent (user_id=%s, ip=%s)", uid, ip)
     except Exception as exc:  # noqa: BLE001 - background task: log, never raise
         logger.warning("Password reset request failed (ip=%s): %s", ip, type(exc).__name__)
@@ -71,7 +72,8 @@ def _process_request(
 
 def _send_changed_notice(mailer: MailSender, to: str, uid: int) -> None:
     try:
-        mailer.send(to, *svc.changed_email())
+        mail = svc.changed_email()
+        mailer.send(to, mail.subject, mail.body)
     except Exception as exc:  # noqa: BLE001
         logger.warning("Password changed notice failed (user_id=%s): %s", uid, type(exc).__name__)
 
@@ -79,6 +81,7 @@ def _send_changed_notice(mailer: MailSender, to: str, uid: int) -> None:
 @router.post(
     "/request",
     status_code=status.HTTP_202_ACCEPTED,
+    response_model=MessageResponse,
     dependencies=[Depends(require_reset_available), Depends(limit_reset_request)],
 )
 def request_reset(
@@ -90,11 +93,12 @@ def request_reset(
     session_factory: Annotated[Callable[[], Session], Depends(get_session_factory)],
 ):
     background.add_task(_process_request, payload.identifier, client_ip(request), settings, mailer, session_factory)
-    return {"detail": REQUEST_ACCEPTED}
+    return MessageResponse(detail=REQUEST_ACCEPTED)
 
 
 @router.post(
     "/confirm",
+    response_model=MessageResponse,
     dependencies=[Depends(require_reset_available), Depends(limit_reset_confirm)],
 )
 def confirm_reset(
@@ -130,4 +134,4 @@ def confirm_reset(
 
     if user.email:
         background.add_task(_send_changed_notice, mailer, user.email, user.id)
-    return {"detail": RESET_DONE}
+    return MessageResponse(detail=RESET_DONE)

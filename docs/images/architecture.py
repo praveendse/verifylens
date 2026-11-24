@@ -8,134 +8,160 @@ same connection. Uses the Playwright Chromium the app already installs.
 from pathlib import Path
 
 HERE = Path(__file__).resolve().parent
-W, H = 1450, 1080
+W, H = 1500, 1140  # drawing starts at y = 40 (viewBox offset)
 INK, MUTED, LINE = "#0f172a", "#475569", "#334155"
 FONT = "Noto Sans, Liberation Sans, Arial, sans-serif"
+# (accent, tint) per layer
+CLIENT = ("#4f46e5", "#f5f7ff")
+API = ("#7c3aed", "#faf7ff")
+SERVICE = ("#0d9488", "#f3fbfa")
+DATA = ("#2563eb", "#f4f8ff")
+EXT = ("#ea580c", "#fff8f3")
+TOOL = ("#64748b", "#f8fafc")
 out: list[str] = []
 
 
-def text(x, y, lines, size=14, weight=400, color=INK, anchor="middle"):
+def esc(s):
+    return s.replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;")
+
+
+def layer(x, y, w, h, name, detail, colors, dash=None):
+    accent, tint = colors
+    d = f' stroke-dasharray="{dash}"' if dash else ""
+    out.append(f'<rect x="{x}" y="{y}" width="{w}" height="{h}" rx="12" fill="{tint}" stroke="{accent}" '
+               f'stroke-opacity="0.45" stroke-width="1.5"{d}/>')
+    out.append(f'<text x="{x + 18}" y="{y + 25}" font-size="13" fill="{accent}"><tspan font-weight="700" '
+               f'letter-spacing="1">{name}</tspan><tspan fill="{MUTED}">   {esc(detail)}</tspan></text>')
+
+
+def card(x, y, w, h, title, lines, colors, center=False):
+    """White card; title bold, detail lines muted. colors is unused (kept for call-site clarity)."""
+    out.append(f'<rect x="{x}" y="{y}" width="{w}" height="{h}" rx="8" fill="#fff" stroke="#e2e8f0" '
+               f'stroke-width="1" filter="url(#shadow)"/>')
+    n = 1 + len(lines)
+    top = y + h / 2 - (n - 1) * 18 / 2 + 5
+    tx, anchor = (x + w / 2, "middle") if center else (x + 16, "start")
+    out.append(f'<text x="{tx}" y="{top}" font-size="14.5" font-weight="700" fill="{INK}" '
+               f'text-anchor="{anchor}">{esc(title)}</text>')
     for i, line in enumerate(lines):
-        w = 700 if (i == 0 and weight == 700) else 400
-        c = color if (i == 0 or weight != 700) else MUTED
-        s = size if i == 0 else size - 1.5
-        out.append(f'<text x="{x}" y="{y + i * (size + 5)}" font-size="{s}" font-weight="{w}" '
-                   f'fill="{c}" text-anchor="{anchor}">{line}</text>')
+        out.append(f'<text x="{tx}" y="{top + (i + 1) * 18}" font-size="12.5" fill="{MUTED}" '
+                   f'text-anchor="{anchor}">{esc(line)}</text>')
 
 
-def box(x, y, w, h, lines, fill="#ffffff", stroke=LINE, color=INK, dash=None, radius=6, title=True):
-    d = f' stroke-dasharray="{dash}"' if dash else ""
-    out.append(f'<rect x="{x}" y="{y}" width="{w}" height="{h}" rx="{radius}" fill="{fill}" '
-               f'stroke="{stroke}" stroke-width="1.5"{d}/>')
-    n = len(lines)
-    top = y + h / 2 - (n - 1) * 19 / 2 + 5
-    text(x + w / 2, top, lines, weight=700 if title else 400, color=color)
-
-
-def layer(x, y, w, h, name, detail, fill="#f1f5f9", stroke="#64748b", color="#334155", dash=None):
-    d = f' stroke-dasharray="{dash}"' if dash else ""
-    out.append(f'<rect x="{x}" y="{y}" width="{w}" height="{h}" rx="10" fill="{fill}" '
-               f'stroke="{stroke}" stroke-width="1.5"{d}/>')
-    out.append(f'<text x="{x + 16}" y="{y + 22}" font-size="13" fill="{color}">'
-               f'<tspan font-weight="700" letter-spacing="0.8">{name}</tspan>'
-               f'<tspan fill="{MUTED}">  {detail}</tspan></text>')
-
-
-def arrow(points, label=None, at=None, anchor="start", dash=None):
-    d = " ".join(f"{'M' if i == 0 else 'L'} {x} {y}" for i, (x, y) in enumerate(points))
+def arrow(points, dash=None):
+    d = " ".join(f"{'M' if i == 0 else 'L'} {px} {py}" for i, (px, py) in enumerate(points))
     da = f' stroke-dasharray="{dash}"' if dash else ""
-    out.append(f'<path d="{d}" fill="none" stroke="{LINE}" stroke-width="2" marker-end="url(#head)"{da}/>')
-    if label:
-        lx, ly = at
-        for i, line in enumerate(label):
-            out.append(f'<text x="{lx}" y="{ly + i * 16}" font-size="12.5" fill="{LINE}" '
-                       f'text-anchor="{anchor}" paint-order="stroke" stroke="#fff" stroke-width="5">{line}</text>')
+    out.append(f'<path d="{d}" fill="none" stroke="{LINE}" stroke-width="1.8" marker-end="url(#head)"{da}/>')
 
 
-CX = 490  # centre line of the main column
+def pill(x, y, label, anchor="start"):
+    """Arrow label in a small rounded white box; (x, y) is the left (or centre) of the pill."""
+    w = len(label) * 6.1 + 22
+    left = x - w / 2 if anchor == "middle" else x
+    out.append(f'<rect x="{left}" y="{y - 11}" width="{w}" height="22" rx="11" fill="#fff" stroke="#cbd5e1"/>'
+               f'<text x="{left + w / 2}" y="{y + 4.5}" font-size="12" fill="{LINE}" '
+               f'text-anchor="middle">{esc(label)}</text>')
+
+
+CX = 520  # centre line of the main column
 
 # Client
-layer(20, 20, 940, 110, "CLIENT", "· Browser")
-box(40, 52, 440, 62, ["React app", "React 19 · Vite 7 · react-markdown"])
-box(500, 52, 440, 62, ["Session state", "access token in memory · refresh token in HttpOnly cookie"])
-arrow([(CX, 130), (CX, 176)], ["HTTPS · JSON · Bearer access token", "refresh cookie sent only to /api/v1/auth"], (CX + 14, 148))
+layer(20, 56, 1000, 122, "CLIENT", "Browser", CLIENT)
+card(40, 94, 470, 66, "React app", ["React 19, Vite 7"], CLIENT)
+card(530, 94, 470, 66, "Session state", ["access token in memory, refresh token in HttpOnly cookie"], CLIENT)
+arrow([(CX, 178), (CX, 230)])
+pill(CX + 14, 194, "HTTPS, JSON, Bearer token")
+pill(CX + 14, 222, "refresh cookie: /api/v1/auth only")
 
 # Reverse proxy
-box(20, 180, 940, 52, ["Reverse proxy (nginx / Caddy) · TLS termination — production",
-                       "development: Vite dev server :5173 forwards /api"], fill="#f8fafc")
-arrow([(CX, 232), (CX, 286)], ["HTTP · 127.0.0.1:8000"], (CX + 14, 262))
+card(20, 234, 1000, 58, "Reverse proxy (nginx or Caddy), TLS", ["dev: Vite server on :5173"], TOOL, center=True)
+arrow([(CX, 292), (CX, 340)])
+pill(CX + 14, 316, "HTTP 127.0.0.1:8000")
 
 # Server boundary
-layer(20, 290, 940, 600, "SERVER", "· Python 3.12 · one Uvicorn process · Docker container (written, not yet built)",
-      fill="#fafcff", stroke="#1e3a8a", color="#1e3a8a", dash="7 5")
+out.append('<rect x="20" y="344" width="1000" height="636" rx="14" fill="none" stroke="#1e3a8a" '
+           'stroke-width="1.6" stroke-dasharray="8 6"/>')
+out.append(f'<text x="38" y="370" font-size="13" fill="#1e3a8a"><tspan font-weight="700" letter-spacing="1">SERVER'
+           f'</tspan><tspan fill="{MUTED}">   Python 3.12, one Uvicorn process, Docker (not yet built)</tspan></text>')
 
 # API layer
-layer(60, 326, 860, 116, "API LAYER", "· FastAPI · Pydantic   (app/api, app/dto, security/)")
-box(76, 360, 190, 66, ["Static frontend", "built React files", "app/frontend.py"])
-box(278, 360, 220, 66, ["REST routes /api/v1", "auth · users · search · history", "admin · password reset · health"])
-box(510, 360, 230, 66, ["Security", "PyJWT (HS256) · Argon2 (pwdlib)", "password policy · roles · CSRF"])
-box(752, 360, 152, 66, ["Rate limiter", "in-memory counters", "(per process)"])
-
-arrow([(CX, 442), (CX, 494)], ["calls"], (CX + 14, 472))
+layer(60, 384, 940, 132, "API LAYER", "FastAPI, Pydantic", API)
+card(76, 424, 200, 74, "Static frontend", ["built React app"], API)
+card(292, 424, 250, 74, "REST routes", ["/api/v1"], API)
+card(558, 424, 260, 74, "Security", ["JWT, Argon2, roles, CSRF"], API)
+card(834, 424, 150, 74, "Rate limiter", ["in memory"], API)
+arrow([(CX, 516), (CX, 562)])
+pill(CX + 14, 539, "calls")
 
 # Service layer
-layer(60, 498, 860, 190, "SERVICE LAYER", "· app/services")
-box(76, 532, 160, 68, ["Search pipeline", "scrape → verify", "→ report"])
-box(248, 532, 190, 68, ["Wikipedia scraper", "Playwright", "headless Chromium"])
-box(450, 532, 170, 68, ["Gemini verifier", "google-genai"])
-box(632, 532, 120, 68, ["Report", "Markdown"])
-box(764, 532, 140, 68, ["Health check", "DB, Wikipedia,", "Gemini (cached 60 s)"])
-box(76, 610, 270, 62, ["Refresh tokens", "issue · rotate · revoke"])
-box(358, 610, 270, 62, ["Password reset", "one-time email links"])
-box(640, 610, 264, 62, ["Mail", "smtplib"])
-
-arrow([(CX, 688), (CX, 742)], ["calls"], (CX + 14, 718))
-
-# Routes that query the database themselves (not through a service)
-arrow([(60, 400), (40, 400), (40, 790), (58, 790)])
-out.append(f'<text x="34" y="595" font-size="12.5" fill="{LINE}" text-anchor="middle" '
-           f'transform="rotate(-90 34 595)" paint-order="stroke" stroke="#fafcff" stroke-width="6">'
-           f'routes also query directly (users, admin, auth, history)</text>')
+layer(60, 566, 940, 260, "SERVICE LAYER", "app/services", SERVICE)
+card(76, 604, 908, 40, "Search pipeline: scrape, verify, label check, report", [], SERVICE, center=True)
+xs = (76, 307, 538, 769)
+for x in xs:
+    arrow([(x + 107, 644), (x + 107, 662)])
+card(xs[0], 666, 215, 64, "Wikipedia scraper", ["Playwright"], SERVICE)
+card(xs[1], 666, 215, 64, "Gemini verifier", ["1 call, Super mode 2"], SERVICE)
+card(xs[2], 666, 215, 64, "Label check", ["Super mode only"], SERVICE)
+card(xs[3], 666, 215, 64, "Report", ["Markdown"], SERVICE)
+card(xs[0], 742, 215, 64, "Refresh tokens", ["issue, rotate, revoke"], SERVICE)
+card(xs[1], 742, 215, 64, "Password reset", ["email link"], SERVICE)
+card(xs[2], 742, 215, 64, "Mail", ["smtplib"], SERVICE)
+card(xs[3], 742, 215, 64, "Health check", ["cached 60 s"], SERVICE)
+arrow([(CX, 826), (CX, 870)])
+pill(CX + 14, 848, "calls")
 
 # Data layer
-layer(60, 746, 860, 104, "DATA LAYER", "· SQLModel / SQLAlchemy   (app/db)")
-box(76, 780, 828, 54, ["Engine &amp; sessions · table models · SearchRepository · additive migrations at startup"],
-    title=False)
+layer(60, 874, 940, 92, "DATA LAYER", "SQLModel", DATA)
+card(76, 906, 908, 44, "Sessions, models, repository, migrations", [], DATA, center=True)
+
+# Routes that query the database themselves (not through a service)
+arrow([(60, 460), (40, 460), (40, 928), (58, 928)])
+pill(28, 848, "routes also query directly")
 
 # SQLite (file on a persistent volume)
-arrow([(CX, 850), (CX, 932)], ["SQL read / write"], (CX + 14, 916))
-cx, top, rx, ry, height = CX, 952, 230, 16, 72
+arrow([(CX, 966), (CX, 1032)])
+pill(CX + 14, 1004, "SQL")
+cx, top, rx, ry, height = CX, 1050, 250, 16, 70
 out.append(f'<path d="M {cx - rx} {top} A {rx} {ry} 0 0 0 {cx + rx} {top} L {cx + rx} {top + height} '
-           f'A {rx} {ry} 0 0 1 {cx - rx} {top + height} Z" fill="#eff6ff" stroke="#1d4ed8" stroke-width="1.5"/>')
-out.append(f'<ellipse cx="{cx}" cy="{top}" rx="{rx}" ry="{ry}" fill="#eff6ff" stroke="#1d4ed8" stroke-width="1.5"/>')
-text(cx, top + 34, ["SQLite (WAL mode) · data/search_history.db",
-                    "user · searchrecord · refreshtoken · passwordresettoken"], weight=700, color="#1e3a8a")
+           f'A {rx} {ry} 0 0 1 {cx - rx} {top + height} Z" fill="#eff6ff" stroke="{DATA[0]}" stroke-width="1.6" '
+           f'filter="url(#shadow)"/>')
+out.append(f'<ellipse cx="{cx}" cy="{top}" rx="{rx}" ry="{ry}" fill="#dbeafe" stroke="{DATA[0]}" stroke-width="1.6"/>')
+out.append(f'<text x="{cx}" y="{top + 38}" font-size="14.5" font-weight="700" fill="#1e3a8a" text-anchor="middle">'
+           f'SQLite (WAL)</text>'
+           f'<text x="{cx}" y="{top + 57}" font-size="12.5" fill="{MUTED}" text-anchor="middle">'
+           f'data/search_history.db</text>')
 
 # CLI scripts
-box(790, 950, 260, 78, ["CLI scripts (separate processes)", "bootstrap_admin · reset_password", "backup_db"],
-    fill="#f8fafc")
-arrow([(790, 989), (cx + rx + 4, 989)])
+card(820, 1046, 270, 80, "CLI scripts", ["bootstrap_admin, reset_password", "backup_db"], TOOL)
+arrow([(820, 1086), (cx + rx + 4, 1086)])
 
 # External services
-layer(1040, 452, 390, 290, "EXTERNAL SERVICES", "", fill="#fffbf5", stroke="#c2410c", color="#9a3412")
-ext = dict(fill="#fff7ed", stroke="#c2410c", color="#7c2d12")
-box(1060, 486, 350, 76, ["Wikipedia  (HTTPS)", "article page + image: scraper", "reachability probe: health check"], **ext)
-box(1060, 572, 350, 76, ["Google Gemini API  (HTTPS)", "image verdict: verifier", "model check: health check"], **ext)
-box(1060, 658, 350, 76, ["SMTP mail server  (SMTP + STARTTLS :587)", "password-reset emails: mail",
-                         "optional, off by default"], **ext)
-arrow([(920, 524), (1056, 524)])
-arrow([(920, 610), (1056, 610)])
-arrow([(920, 678), (990, 678), (990, 696), (1056, 696)])
+layer(1060, 566, 420, 324, "EXTERNAL SERVICES", "", EXT)
+card(1080, 604, 380, 80, "Wikipedia", ["HTTPS"], EXT)
+card(1080, 696, 380, 80, "Google Gemini API", ["HTTPS"], EXT)
+card(1080, 788, 380, 84, "SMTP mail server", ["STARTTLS :587, optional"], EXT)
+arrow([(1000, 644), (1076, 644)])
+arrow([(1000, 736), (1076, 736)])
+arrow([(1000, 800), (1030, 800), (1030, 830), (1076, 830)])
 
 # Legend
-text(20, 1062, ["Arrows point from caller to callee; each reply returns on the same connection.  "
-                "Dashed border: deployment boundary."], size=13, color=MUTED, anchor="start")
+ly = H + 40 - 22
+lx = 20
+for name, (accent, _) in (("Client", CLIENT), ("API", API), ("Services", SERVICE), ("Data", DATA),
+                          ("External", EXT), ("Infrastructure", TOOL)):
+    out.append(f'<rect x="{lx}" y="{ly - 11}" width="12" height="12" rx="3" fill="{accent}"/>'
+               f'<text x="{lx + 18}" y="{ly}" font-size="12.5" fill="{MUTED}">{name}</text>')
+    lx += 18 + len(name) * 7.2 + 22
+out.append(f'<text x="{lx + 8}" y="{ly}" font-size="12.5" fill="{MUTED}">Arrows go from caller to callee. '
+           f'Dashed line: deployment boundary.</text>')
 
-svg = (f'<svg xmlns="http://www.w3.org/2000/svg" width="{W}" height="{H}" viewBox="0 0 {W} {H}" '
-       f'font-family="{FONT}">'
-       f'<defs><marker id="head" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="8" markerHeight="8" '
-       f'orient="auto-start-reverse"><path d="M0 0 L10 5 L0 10 z" fill="{LINE}"/></marker></defs>'
-       f'<rect width="100%" height="100%" fill="#ffffff"/>' + "".join(out) + "</svg>")
+svg = (f'<svg xmlns="http://www.w3.org/2000/svg" width="{W}" height="{H}" viewBox="0 40 {W} {H}" '
+       f'font-family="{FONT}"><defs>'
+       f'<marker id="head" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7.5" markerHeight="7.5" '
+       f'orient="auto-start-reverse"><path d="M0 0 L10 5 L0 10 z" fill="{LINE}"/></marker>'
+       f'<filter id="shadow" x="-5%" y="-10%" width="110%" height="130%"><feDropShadow dx="0" dy="1.5" '
+       f'stdDeviation="1.6" flood-color="#0f172a" flood-opacity="0.10"/></filter></defs>'
+       f'<rect y="40" width="{W}" height="{H}" fill="#ffffff"/>' + "".join(out) + "</svg>")
 (HERE / "architecture.svg").write_text(svg, encoding="utf-8")
 
 if __name__ == "__main__":

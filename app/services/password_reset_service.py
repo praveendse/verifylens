@@ -11,6 +11,7 @@ from sqlalchemy import Engine, delete, or_, update
 from sqlmodel import Session, select
 
 from app.db.models import PasswordResetToken, User
+from app.dto.auth_models import MailContent
 from app.settings import Settings
 
 PURGE_AFTER_DAYS = 7
@@ -130,7 +131,7 @@ def reset_link(base_url: str, raw: str) -> str:
     return f"{base_url.rstrip('/')}/reset-password#token={raw}"
 
 
-def reset_email(link: str, minutes: int) -> tuple[str, str]:
+def reset_email(link: str, minutes: int) -> MailContent:
     subject = "VerifyLens password reset"
     body = (
         "Someone asked to reset the password for your VerifyLens account.\n\n"
@@ -139,14 +140,14 @@ def reset_email(link: str, minutes: int) -> tuple[str, str]:
         "The link works once.\n\n"
         "If you didn't ask for this, ignore this email. Your password stays the same.\n"
     )
-    return subject, body
+    return MailContent(subject=subject, body=body)
 
 
-def changed_email() -> tuple[str, str]:
+def changed_email() -> MailContent:
     subject = "Your VerifyLens password was changed"
     body = (
         "Your VerifyLens password was changed using a reset link, and all of\n"
         "your sessions were signed out.\n\n"
         "If this wasn't you, contact your admin right away.\n"
     )
-    return subject, body
+    return MailContent(subject=subject, body=body)

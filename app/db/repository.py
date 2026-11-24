@@ -3,6 +3,7 @@ import json
 from sqlalchemy import func, or_
 from sqlmodel import Session, select
 from app.db.models import SearchRecord
+from app.dto.history_models import HistoryStats
 
 
 class SearchRepository:
@@ -133,7 +134,7 @@ class SearchRepository:
 
         return self.session.exec(statement).all()
 
-    def count_outcomes(self, user_id: int | None = None) -> dict[str, int]:
+    def count_outcomes(self, user_id: int | None = None) -> HistoryStats:
         """Totals per outcome over ALL of a user's records (admin: all records).
 
         One GROUP BY query; no rows are loaded into memory.
@@ -144,18 +145,18 @@ class SearchRepository:
             user_id,
         )
 
-        counts = {"total": 0, "completed": 0, "match": 0, "no_match": 0, "error": 0, "other": 0}
+        counts = HistoryStats()
         for status, matches, n in self.session.exec(statement).all():
-            counts["total"] += n
+            counts.total += n
             if status == "SUCCESS":
-                counts["completed"] += n
+                counts.completed += n
             if status == "SUCCESS" and matches is True:
-                counts["match"] += n
+                counts.match += n
             elif status == "SUCCESS" and matches is False:
-                counts["no_match"] += n
+                counts.no_match += n
             elif status == "ERROR":
-                counts["error"] += n
+                counts.error += n
             else:
                 # PENDING, SUCCESS without a verdict, or any unknown status
-                counts["other"] += n
+                counts.other += n
         return counts

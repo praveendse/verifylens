@@ -12,6 +12,7 @@ import pytest
 from google.genai import errors as genai_errors
 from google.genai import types
 
+from app.dto.models import ArticleDTO, GeminiConfig
 from app.services import gemini_service
 from app.services.gemini_service import (
     MAX_ATTEMPTS,
@@ -23,11 +24,17 @@ from app.services.gemini_service import (
     verify_image,
 )
 
-ARTICLE = {
-    "title": "Bugatti",
-    "paragraph": "Automobiles Ettore Bugatti was a French manufacturer.",
-    "fields": {"founder": "Ettore Bugatti", "founded": "1909"},
-}
+ARTICLE = ArticleDTO(
+    title="Bugatti",
+    paragraph="Automobiles Ettore Bugatti was a French manufacturer.",
+    source_url="https://en.wikipedia.org/wiki/Bugatti",
+    image_url="https://upload.wikimedia.org/bugatti.png",
+    fields={"founder": "Ettore Bugatti", "founded": "1909"},
+)
+
+
+def cfg(model="gemini-test", **kw):
+    return GeminiConfig(api_key="test-key", model=model, **kw)
 
 GOOD = {
     "description": "The red and white Bugatti oval logo with the EB monogram.",
@@ -92,7 +99,7 @@ def fake_gemini(monkeypatch):
 
 
 def run(image):
-    return verify_image(ARTICLE, image, api_key="test-key", model="gemini-test")
+    return verify_image(ARTICLE, image, cfg("gemini-test"))
 
 
 # --- Happy path ---------------------------------------------------------------
@@ -100,14 +107,14 @@ def run(image):
 def test_valid_response_is_returned(fake_gemini, image):
     models = fake_gemini(make_response(GOOD))
 
-    assert run(image) == GOOD
+    assert run(image).model_dump() == GOOD
     assert len(models.calls) == 1
 
 
 def test_whitespace_is_trimmed(fake_gemini, image):
     fake_gemini(make_response({**GOOD, "reason": "  " + GOOD["reason"] + "\n"}))
 
-    assert run(image)["reason"] == GOOD["reason"]
+    assert run(image).reason == GOOD["reason"]
 
 
 def test_request_config_bounds_output_and_orders_reason_first(fake_gemini, image):
@@ -123,7 +130,7 @@ def test_request_config_bounds_output_and_orders_reason_first(fake_gemini, image
 
 def test_gemini3_models_use_thinking_level_not_budget(fake_gemini, image):
     models = fake_gemini(make_response(GOOD))
-    verify_image(ARTICLE, image, api_key="test-key", model="gemini-3.5-flash-lite", thinking_level="medium")
+    verify_image(ARTICLE, image, cfg("gemini-3.5-flash-lite", thinking_level="medium"))
 
     thinking = models.calls[0]["config"].thinking_config
     assert thinking.thinking_level == types.ThinkingLevel.MEDIUM
@@ -133,14 +140,14 @@ def test_gemini3_models_use_thinking_level_not_budget(fake_gemini, image):
 
 def test_default_thinking_level_is_low(fake_gemini, image):
     models = fake_gemini(make_response(GOOD))
-    verify_image(ARTICLE, image, api_key="test-key", model="gemini-3.8-flash")
+    verify_image(ARTICLE, image, cfg("gemini-3.8-flash"))
 
     assert models.calls[0]["config"].thinking_config.thinking_level == types.ThinkingLevel.LOW
 
 
 def test_gemini2_models_keep_a_thinking_budget(fake_gemini, image):
     models = fake_gemini(make_response(GOOD))
-    verify_image(ARTICLE, image, api_key="test-key", model="gemini-2.5-flash", thinking_level="high")
+    verify_image(ARTICLE, image, cfg("gemini-2.5-flash", thinking_level="high"))
 
     thinking = models.calls[0]["config"].thinking_config
     assert thinking.thinking_level is None
@@ -196,7 +203,7 @@ def api_error(cls, code, status):
 
 def test_each_request_has_the_timeout(fake_gemini, image):
     models = fake_gemini(make_response(GOOD))
-    verify_image(ARTICLE, image, api_key="test-key", model="gemini-test", timeout_s=60)
+    verify_image(ARTICLE, image, cfg("gemini-test", timeout_s=60))
 
     assert models.calls[0]["config"].http_options.timeout == 60_000
 
@@ -211,7 +218,7 @@ def test_each_request_has_the_timeout(fake_gemini, image):
 def test_transient_error_is_retried_with_backoff(fake_gemini, image, transient):
     models = fake_gemini(transient, make_response(GOOD))
 
-    assert run(image) == GOOD
+    assert run(image).model_dump() == GOOD
     assert len(models.calls) == 2
     assert len(models.sleeps) == 1 and models.sleeps[0] > 0
 
@@ -220,7 +227,7 @@ def test_backoff_grows_between_retries(fake_gemini, image):
     busy = api_error(genai_errors.ServerError, 503, "UNAVAILABLE")
     models = fake_gemini(busy, busy, make_response(GOOD))
 
-    assert run(image) == GOOD
+    assert run(image).model_dump() == GOOD
     assert len(models.sleeps) == 2 and models.sleeps[1] > models.sleeps[0]
 
 
@@ -283,7 +290,7 @@ def test_unavailable_error_is_a_runtime_error_for_existing_handlers():
 def test_bad_output_is_retried_then_recovers(fake_gemini, image, bad_response):
     models = fake_gemini(bad_response, make_response(GOOD))
 
-    assert run(image) == GOOD
+    assert run(image).model_dump() == GOOD
     assert len(models.calls) == 2
 
 
@@ -335,7 +342,7 @@ def test_repetition_detector_flags_loop():
 def test_missing_api_key_raises(fake_gemini, image):
     models = fake_gemini()
     with pytest.raises(ValueError, match="API key"):
-        verify_image(ARTICLE, image, api_key="", model="gemini-test")
+        verify_image(ARTICLE, image, GeminiConfig(api_key="", model="gemini-test"))
     assert models.calls == []
 
 
@@ -353,7 +360,7 @@ BLIND = "A red and white oval badge with the letters EB and the word BUGATTI."
 
 
 def describe(image):
-    return gemini_service.describe_image(image, api_key="test-key", model="gemini-test")
+    return gemini_service.describe_image(image, cfg())
 
 
 def test_blind_description_sees_only_the_image(fake_gemini, image):
@@ -362,7 +369,7 @@ def test_blind_description_sees_only_the_image(fake_gemini, image):
     assert describe(image) == BLIND
     prompt, image_part = models.calls[0]["contents"]
     # Nothing from the article reaches the blind call.
-    for leaked in (ARTICLE["title"], ARTICLE["paragraph"], "Ettore", "1909"):
+    for leaked in (ARTICLE.title, ARTICLE.paragraph, "Ettore", "1909"):
         assert leaked not in prompt
     assert isinstance(image_part, types.Part)
     schema = models.calls[0]["config"].response_schema
@@ -386,23 +393,23 @@ def test_bad_blind_descriptions_fail_after_max_attempts(fake_gemini, image, bad)
 
 def test_blind_description_needs_an_api_key(image):
     with pytest.raises(ValueError):
-        gemini_service.describe_image(image, api_key="", model="gemini-test")
+        gemini_service.describe_image(image, GeminiConfig(api_key="", model="gemini-test"))
 
 
 def test_verdict_prompt_includes_the_blind_description_and_report_uses_it(fake_gemini, image):
     models = fake_gemini(make_response(GOOD))
 
-    result = verify_image(ARTICLE, image, api_key="test-key", model="gemini-test", blind_description=BLIND)
+    result = verify_image(ARTICLE, image, cfg(), blind_description=BLIND)
 
     prompt = models.calls[0]["contents"][0]
     assert BLIND in prompt and "WITHOUT seeing the article" in prompt
-    assert result["description"] == BLIND  # the report shows the independent one
-    assert result["matches"] is True and result["reason"] == GOOD["reason"]
+    assert result.description == BLIND  # the report shows the independent one
+    assert result.matches is True and result.reason == GOOD["reason"]
 
 
 def test_standard_mode_prompt_has_no_independent_description(fake_gemini, image):
     models = fake_gemini(make_response(GOOD))
-    assert run(image) == GOOD
+    assert run(image).model_dump() == GOOD
     assert "Independent description" not in models.calls[0]["contents"][0]
 
 
@@ -412,10 +419,24 @@ def test_prompt_handles_look_alikes_without_trusting_the_text(fake_gemini, image
     difference is a mismatch. Applies to both modes (same verdict prompt)."""
     for blind in (None, "A violin-family instrument."):
         models = fake_gemini(make_response(GOOD))
-        verify_image(ARTICLE, image, api_key="test-key", model="gemini-test", blind_description=blind)
+        verify_image(ARTICLE, image, cfg(), blind_description=blind)
         prompt = " ".join(models.calls[0]["contents"][0].split())
         assert "use the First Paragraph to decide what kind of thing the subject is" in prompt
         assert "If something visible shows it is a different thing, matches = false." in prompt
         assert "nothing visible contradicts the article, matches = true" in prompt
         assert "cannot be confirmed from the image alone" in prompt
         assert "Do not assume the image matches just because the article information was provided." in prompt
+
+
+def test_config_repr_never_shows_the_api_key():
+    config = GeminiConfig(api_key="secret-key-value", model="gemini-test")
+    assert "secret-key-value" not in repr(config) and "secret-key-value" not in str(config)
+
+
+def test_config_from_settings():
+    from app.settings import Settings
+
+    settings = Settings(_env_file=None, gemini_api_key="k", gemini_model="gemini-x", gemini_thinking_level="high",
+                        gemini_timeout_seconds=30)
+    assert GeminiConfig.from_settings(settings) == GeminiConfig(
+        api_key="k", model="gemini-x", thinking_level="high", timeout_s=30)

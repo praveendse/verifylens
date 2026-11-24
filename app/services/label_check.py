@@ -9,6 +9,8 @@ such as "Corporate logotype since 2021" (BMW) never repeat the title.
 import re
 import unicodedata
 
+from app.dto.models import LabelCheckResult
+
 # Words that appear in titles and labels without naming anything specific.
 COMMON_WORDS = {
     "the", "and", "for", "from", "with", "group", "logo", "logotype", "company", "inc",
@@ -36,17 +38,17 @@ def title_words(title: str) -> set[str]:
     return _words(re.sub(r"\([^)]*\)", " ", title))
 
 
-def check_labels(title: str, labels: dict[str, str | None]) -> dict:
-    """{"status": "agrees" | "unclear" | "no_labels", "matched_in": [label names]}.
+def check_labels(title: str, labels: dict[str, str | None]) -> LabelCheckResult:
+    """status "agrees" | "unclear" | "no_labels", and the label names that matched.
 
     "agrees" when any label contains any significant word of the title.
     """
     present = [(key, name) for key, name in LABELS if (labels.get(key) or "").strip()]
     if not present:
-        return {"status": "no_labels", "matched_in": []}
+        return LabelCheckResult(status="no_labels")
     wanted = title_words(title)
     matched = [name for key, name in present if wanted & _words(labels[key])]
-    return {"status": "agrees" if matched else "unclear", "matched_in": matched}
+    return LabelCheckResult(status="agrees" if matched else "unclear", matched_in=matched)
 
 
 def needs_review(matches: bool, label_status: str) -> str | None:

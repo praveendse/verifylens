@@ -4,7 +4,6 @@ No Wikipedia or Gemini calls. No changes to real user/search data.
 """
 import json
 from pathlib import Path
-from types import SimpleNamespace
 
 import pytest
 from fastapi.testclient import TestClient
@@ -13,6 +12,8 @@ from sqlmodel import Session, SQLModel, create_engine, select
 from app.api.dependencies import get_pipeline_service
 from app.db.database import get_session
 from app.db.models import SearchRecord, User
+from app.dto.models import ArticleDTO, LabelCheckResult, VerificationDTO
+from app.services.pipeline_service import PipelineResult
 from app.main import app
 from security.passwords import hash_password
 
@@ -21,17 +22,17 @@ class FakePipeline:
     def generate_with_details(self, topic: str, work_dir: Path, mode: str = "standard"):
         report_path = work_dir / "report.md"
         report_path.write_text(f"# {topic}\n\n**Match Status: PASS**", encoding="utf-8")
-        return SimpleNamespace(
+        return PipelineResult(
             report_path=report_path,
-            article={
+            article=ArticleDTO.model_validate({
                 "title": topic,
                 "paragraph": "An example article.",
                 "source_url": "https://en.wikipedia.org/wiki/Test",
                 "image_url": "https://example.com/image.jpg",
                 "fields": {"known for": "A test"},
-            },
-            verification={"description": "Example image", "matches": True, "reason": "Matched"},
-            labels={"status": "agrees", "matched_in": ["File name"]},
+            }),
+            verification=VerificationDTO.model_validate({"description": "Example image", "matches": True, "reason": "Matched"}),
+            labels=LabelCheckResult(status="agrees", matched_in=["File name"]),
             review_reason=None,
         )
 

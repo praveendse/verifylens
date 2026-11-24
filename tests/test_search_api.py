@@ -1,7 +1,6 @@
 
 import json
 from pathlib import Path
-from types import SimpleNamespace
 
 import pytest
 from fastapi.testclient import TestClient
@@ -11,6 +10,8 @@ from app.main import app
 from app.api.dependencies import get_pipeline_service
 from app.db.database import get_session
 from app.db.models import SearchRecord, User
+from app.dto.models import ArticleDTO, LabelCheckResult, VerificationDTO
+from app.services.pipeline_service import PipelineResult
 from security.passwords import hash_password
 
 TEST_USERNAME = "searcher"
@@ -44,9 +45,9 @@ class FakePipeline:
             encoding="utf-8",
         )
 
-        return SimpleNamespace(
+        return PipelineResult(
             report_path=report_path,
-            article={
+            article=ArticleDTO.model_validate({
                 "title": topic,
                 "paragraph": "A test article.",
                 "source_url": "https://en.wikipedia.org/wiki/Test",
@@ -55,14 +56,14 @@ class FakePipeline:
                     "born": "14 March 1879",
                     "known for": "Relativity",
                 },
-            },
-            verification={
+            }),
+            verification=VerificationDTO.model_validate({
                 "description": "A portrait.",
                 "matches": True,
                 "reason": "Matches the article.",
-            },
+            }),
             # Like the real pipeline: the label check runs in super mode only
-            labels={"status": self.label_status, "matched_in": []} if mode == "thorough" else None,
+            labels=LabelCheckResult(status=self.label_status, matched_in=[]) if mode == "thorough" else None,
             review_reason=self.review_reason if mode == "thorough" else None,
         )
 

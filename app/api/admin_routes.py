@@ -14,6 +14,17 @@ from sqlmodel import Session, select
 from app.api.auth_dependencies import require_admin
 from app.db.database import get_session
 from app.db.models import SearchRecord, User
+from app.dto.admin_models import (
+    AdminOverviewResponse,
+    DailyActivity,
+    ErrorCause,
+    IdleUsers,
+    PeriodCounts,
+    RecentError,
+    TopUser,
+    UserBrief,
+    UserCounts,
+)
 from app.services.search_errors import describe
 
 router = APIRouter(prefix="/admin", tags=["Admin"])
@@ -27,14 +38,14 @@ ERROR_CAUSES = 3
 
 
 
-def _merge_causes(causes, label) -> list[dict]:
+def _merge_causes(causes, label) -> list[ErrorCause]:
     """Old records store class names, new ones codes; both can share a label.
     Merge rows by label, then keep the most common few."""
-    merged: dict[str, dict] = {}
+    merged: dict[str, ErrorCause] = {}
     for code, n in causes:
-        row = merged.setdefault(label(code), {"code": code, "label": label(code), "count": 0})
-        row["count"] += n
-    return sorted(merged.values(), key=lambda r: -r["count"])[:ERROR_CAUSES]
+        row = merged.setdefault(label(code), ErrorCause(code=code, label=label(code), count=0))
+        row.count += n
+    return sorted(merged.values(), key=lambda r: -r.count)[:ERROR_CAUSES]
 
 
 def _outcome():
@@ -47,22 +58,22 @@ def _outcome():
     )
 
 
-def _window(session: Session, start: datetime, end: datetime) -> dict:
+def _window(session: Session, start: datetime, end: datetime) -> PeriodCounts:
     rows = session.exec(
         select(_outcome(), func.count())
         .where(SearchRecord.created_at >= start, SearchRecord.created_at < end)
         .group_by(_outcome())
     ).all()
-    counts = {"total": 0, "match": 0, "no_match": 0, "error": 0, "other": 0}
+    counts = PeriodCounts()
     for bucket, n in rows:
-        counts[bucket] += n
-        counts["total"] += n
+        setattr(counts, bucket, getattr(counts, bucket) + n)
+        counts.total += n
     active = session.exec(
         select(func.count(func.distinct(SearchRecord.user_id)))
         .where(SearchRecord.created_at >= start, SearchRecord.created_at < end,
                SearchRecord.user_id.is_not(None))
     ).one()
-    counts["active_users"] = active
+    counts.active_users = active
     return counts
 
 
@@ -73,11 +84,11 @@ def _iso_utc(value: datetime | None) -> str | None:
     return (value if value.tzinfo else value.replace(tzinfo=timezone.utc)).isoformat()
 
 
-def _user_brief(user: User) -> dict:
-    return {"id": user.id, "username": user.username, "full_name": user.full_name}
+def _user_brief(user: User) -> UserBrief:
+    return UserBrief(id=user.id, username=user.username, full_name=user.full_name)
 
 
-@router.get("/overview")
+@router.get("/overview", response_model=AdminOverviewResponse)
 def admin_overview(
     admin: Annotated[User, Depends(require_admin)],
     session: Annotated[Session, Depends(get_session)],
@@ -110,14 +121,12 @@ def admin_overview(
         .where(SearchRecord.created_at >= trend_start)
         .group_by(day, _outcome())
     ).all()
-    daily = {
-        (trend_start + timedelta(days=i)).date().isoformat(): {"match": 0, "no_match": 0, "error": 0, "other": 0}
-        for i in range(TREND_DAYS)
-    }
+    dates = [(trend_start + timedelta(days=i)).date().isoformat() for i in range(TREND_DAYS)]
+    daily = {d: DailyActivity(date=d) for d in dates}
     for d, bucket, n in daily_rows:
         key = str(d)[:10]
         if key in daily:
-            daily[key][bucket] += n
+            setattr(daily[key], bucket, getattr(daily[key], bucket) + n)
 
     # Most active users (30 days) ----------------------------------------------
     searches = func.count(SearchRecord.id).label("searches")
@@ -157,27 +166,26 @@ def admin_overview(
     ).all()
 
     def label(code):
-        return describe(code)[0]
+        return describe(code).label
 
-    return {
-        "generated_at": now.isoformat(),
-        "trend_days": TREND_DAYS,
-        "kpi_days": KPI_DAYS,
-        "users": {
-            "total": total, "admins": admins, "inactive": inactive,
+    return AdminOverviewResponse(
+        generated_at=now.isoformat(),
+        trend_days=TREND_DAYS,
+        kpi_days=KPI_DAYS,
+        users=UserCounts(
+            total=total, admins=admins, inactive=inactive,
             # Account mix for the overview bar: these three add up to total.
-            "active_admins": active_admins, "active_users": total - inactive - active_admins,
-        },
-        "last_period": _window(session, kpi_start, tomorrow),
-        "previous_period": _window(session, prev_start, kpi_start),
-        "daily": [{"date": d, **counts} for d, counts in daily.items()],
-        "top_users": [{**_user_brief(u), "searches": n} for u, n in top],
-        "idle_users": {"count": idle_count, "sample": [_user_brief(u) for u in idle_sample]},
-        "recent_errors": [
-            {"id": rid, "query": q, "code": code, "label": label(code),
-             "created_at": _iso_utc(created),
-             "username": username}
+            active_admins=active_admins, active_users=total - inactive - active_admins,
+        ),
+        last_period=_window(session, kpi_start, tomorrow),
+        previous_period=_window(session, prev_start, kpi_start),
+        daily=list(daily.values()),
+        top_users=[TopUser(**_user_brief(u).model_dump(), searches=n) for u, n in top],
+        idle_users=IdleUsers(count=idle_count, sample=[_user_brief(u) for u in idle_sample]),
+        recent_errors=[
+            RecentError(id=rid, query=q, code=code, label=label(code),
+                        created_at=_iso_utc(created), username=username)
             for rid, q, code, created, username in recent_errors
         ],
-        "error_causes": _merge_causes(causes, label),
-    }
+        error_causes=_merge_causes(causes, label),
+    )

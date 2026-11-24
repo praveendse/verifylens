@@ -1,6 +1,7 @@
 """Label check (spec SRCH-14): plain code, examples taken from live articles (2026-11-24)."""
 import pytest
 
+from app.dto.models import LabelCheckResult
 from app.services.label_check import check_labels, needs_review, title_words
 
 
@@ -25,12 +26,12 @@ from app.services.label_check import check_labels, needs_review, title_words
     ("Lion", {"caption": None, "alt": " ", "file": None}, "no_labels", []),
 ])
 def test_check_labels(title, labels, status, matched_in):
-    assert check_labels(title, labels) == {"status": status, "matched_in": matched_in}
+    assert check_labels(title, labels) == LabelCheckResult(status=status, matched_in=matched_in)
 
 
 def test_common_words_do_not_count_as_naming_the_subject():
     # "Group", "logo", file extensions and short words are ignored.
-    assert check_labels("BMW Group", {"caption": "Group logo", "alt": None, "file": "logo.svg"})["status"] == "unclear"
+    assert check_labels("BMW Group", {"caption": "Group logo", "alt": None, "file": "logo.svg"}).status == "unclear"
 
 
 def test_title_words_drop_the_disambiguation_part():

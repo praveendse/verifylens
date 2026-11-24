@@ -43,6 +43,7 @@ from playwright.sync_api import sync_playwright
 
 from google.genai import types as genai_types
 
+from app.dto.models import ArticleDTO, GeminiConfig
 from app.services import gemini_service
 from app.services.gemini_service import describe_image, verify_image
 from app.services.label_check import check_labels, needs_review
@@ -181,11 +182,12 @@ def run_case(case, articles, model, level, api_key, mode="standard"):
     for attempt in range(4):  # back off on rate limits / transient server errors
         raw.clear()
         try:
-            kw = {"thinking_level": level} if level else {}
-            blind = describe_image(image_path, api_key=api_key, model=model, **kw) if mode == "thorough" else None
-            answer = verify_image(article, image_path, api_key=api_key, model=model, blind_description=blind, **kw)
-            result.update(ok=True, predicted=answer["matches"], reason=answer["reason"],
-                          description=answer["description"])
+            config = GeminiConfig(api_key=api_key, model=model, **({"thinking_level": level} if level else {}))
+            blind = describe_image(image_path, config) if mode == "thorough" else None
+            # The cache holds the scraper's dict; extra keys (local_image) are ignored.
+            answer = verify_image(ArticleDTO.model_validate(article), image_path, config, blind_description=blind)
+            result.update(ok=True, predicted=answer.matches, reason=answer.reason,
+                          description=answer.description)
             if mode == "thorough":
                 # The image's own labels, checked against the ARTICLE's title,
                 # exactly as the pipeline does for the scraped image.
@@ -193,8 +195,8 @@ def run_case(case, articles, model, level, api_key, mode="standard"):
                                                          "alt": image_meta.get("image_alt"),
                                                          "file": image_meta.get("image_file")
                                                          if "local_image" in image_meta else None})
-                result.update(label_check=labels["status"],
-                              needs_review=needs_review(answer["matches"], labels["status"]) is not None)
+                result.update(label_check=labels.status,
+                              needs_review=needs_review(answer.matches, labels.status) is not None)
             break
         except Exception as exc:  # noqa: BLE001
             msg = f"{type(exc).__name__}: {exc}"[:300]

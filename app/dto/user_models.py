@@ -4,6 +4,7 @@ from typing import Literal
 
 from pydantic import BaseModel, Field, field_validator, model_validator
 
+from app.dto.common import PageQuery
 from security.password_policy import password_problem
 
 # Deliberately simple: one "@", no spaces, a dot in the domain. Real
@@ -53,6 +54,12 @@ class UserCreate(BaseModel):
         if problem:
             raise ValueError(problem)
         return self
+
+
+class UserListQuery(PageQuery):
+    # Keyset cursor: id of the last account the client already has.
+    after_id: int | None = Field(default=None, ge=1)
+    q: str | None = Field(default=None, max_length=100)
 
 
 class PasswordReset(BaseModel):

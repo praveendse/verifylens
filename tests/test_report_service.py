@@ -1,6 +1,7 @@
 """Markdown report generator (pure function: no network, no database)."""
 from pathlib import Path
 
+from app.dto.models import ArticleDTO, LabelCheckResult, VerificationDTO
 from app.services.report_service import generate_report
 
 
@@ -12,15 +13,15 @@ def article(**overrides):
         "image_url": "https://upload.wikimedia.org/eiffel.jpg",
         "fields": {"location": "Paris", "height": "330 m"},
     }
-    return data | overrides
+    return ArticleDTO(**(data | overrides))
 
 
 def verification(matches=True):
-    return {
-        "matches": matches,
-        "description": "A tall iron tower against a blue sky.",
-        "reason": "The image shows the tower described in the article.",
-    }
+    return VerificationDTO(
+        matches=matches,
+        description="A tall iron tower against a blue sky.",
+        reason="The image shows the tower described in the article.",
+    )
 
 
 def render(tmp_path: Path, art=None, ver=None) -> str:
@@ -66,7 +67,7 @@ def test_report_lists_labels_and_the_label_check(tmp_path):
     art = article(image_caption="Seen from the Champ de Mars, 2009", image_alt=None,
                   image_file="Tour_Eiffel_Wikimedia_Commons_(cropped).jpg")
     path = generate_report(art, tmp_path / "img.jpg", verification(), tmp_path / "r.md",
-                           labels={"status": "agrees", "matched_in": ["File name"]}, mode="thorough")
+                           labels=LabelCheckResult(status="agrees", matched_in=["File name"]), mode="thorough")
     text = path.read_text(encoding="utf-8")
 
     assert "| Caption | Seen from the Champ de Mars, 2009 |" in text
@@ -81,7 +82,7 @@ def test_report_lists_labels_and_the_label_check(tmp_path):
 def test_report_shows_needs_review_with_the_reason(tmp_path):
     reason = "The image was judged a match, but none of Wikipedia's labels name the subject."
     path = generate_report(article(), tmp_path / "img.jpg", verification(), tmp_path / "r.md",
-                           labels={"status": "unclear", "matched_in": []}, review_reason=reason, mode="thorough")
+                           labels=LabelCheckResult(status="unclear"), review_reason=reason, mode="thorough")
     text = path.read_text(encoding="utf-8")
 
     assert "**Match Status: PASS**" in text  # the verdict is unchanged
@@ -100,7 +101,7 @@ def test_super_mode_without_labels_says_no_labels(tmp_path):
 def test_standard_mode_has_none_of_the_super_mode_additions(tmp_path):
     reason = "The image was judged a match, but none of Wikipedia's labels name the subject."
     path = generate_report(article(image_caption="A caption"), tmp_path / "img.jpg", verification(), tmp_path / "r.md",
-                           labels={"status": "unclear", "matched_in": []}, review_reason=reason)  # mode defaults to standard
+                           labels=LabelCheckResult(status="unclear"), review_reason=reason)  # mode defaults to standard
     text = path.read_text(encoding="utf-8")
     for new_part in ("Verification mode", "image alone", "Wikipedia Image Labels", "Label check", "Needs review"):
         assert new_part not in text

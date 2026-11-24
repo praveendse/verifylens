@@ -56,14 +56,14 @@ def search_wikipedia(
             # Step 3: Save successful result to SQLite
             record = repository.mark_success(
                 record=record,
-                article_title=result.article["title"],
-                source_url=result.article["source_url"],
-                image_url=result.article["image_url"],
-                fields=result.article["fields"],
-                matches=result.verification["matches"],
+                article_title=result.article.title,
+                source_url=result.article.source_url,
+                image_url=result.article.image_url,
+                fields=result.article.fields,
+                matches=result.verification.matches,
                 report_markdown=markdown,
                 # Super mode only; NULL in standard mode (spec SRCH-14)
-                label_check=result.labels["status"] if result.labels else None,
+                label_check=result.labels.status if result.labels else None,
                 needs_review=(result.review_reason is not None) if result.labels else None,
                 verification_mode=request.mode,
             )
@@ -77,7 +77,7 @@ def search_wikipedia(
                 matches=record.matches,
                 report_markdown=record.report_markdown,
                 image_url=record.image_url,
-                fields=result.article["fields"],
+                fields=result.article.fields,
                 verification_mode=record.verification_mode,
                 label_check=record.label_check,
                 needs_review=record.needs_review,
@@ -93,7 +93,6 @@ def search_wikipedia(
         # Store a short code; the user gets a plain-language reason for it.
         code = code_for(exc)
         repository.mark_error(record=record, message=code)
-        _, message = describe(code)
 
         # 503 = temporary (try again later), 422 = nothing to verify for this
         # topic, 500 = our fault.
@@ -106,5 +105,5 @@ def search_wikipedia(
 
         raise HTTPException(
             status_code=status,
-            detail=message,  # record id stays in the logs and History, not the message
+            detail=describe(code).message,  # record id stays in the logs and History, not the message
         ) from exc
