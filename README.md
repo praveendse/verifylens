@@ -1,23 +1,18 @@
-# VerifyLens - Wikipedia Image Verifier (Task 03, PHX-433)
+# VerifyLens - Wikipedia Image Verifier
 
 VerifyLens takes a Wikipedia topic, finds the article and its main image, and
 asks Google Gemini whether the image actually fits the article. It then
 produces a Markdown verification report. Every search is saved in SQLite and
 tied to the user who ran it. Users sign in. Admins manage accounts.
 
-**Status (2026-11-23):** all 7 Jira requirements are implemented. 5 are
-verified by automated tests. 2 still need a recorded end-to-end run against
-the real Wikipedia and Gemini services; see [Testing & Verification](#7-testing--verification).
-
 ---
 
 ## 1. Project Overview
 
-**Objective (Jira PHX-433, "Database Writing and Login System").** Add login
-and role-based access to the FastAPI backend from Task 02. Add a React
-frontend. Store users, searches and reports in SQLite.
+**Objective.** Add login and role-based access to the FastAPI backend, a
+React frontend, and SQLite storage for users, searches and reports.
 
-![In scope: sign-in, two roles (Admin, User), admin user management, Wikipedia search with Gemini image verification, Markdown reports, per-user search history. Added beyond PHX-433 (needs scope approval, off by default): self-service password reset by email link. Out of scope: self-registration, multi-server deployment, public internet hosting.](frontend-react/src/assets/In-Scope%20Features%20and%20Boundaries.png)
+![Use case diagram. Actors: User and Admin; Admin inherits every User use case. User: sign in, sign out, change own password, check system status, verify a Wikipedia topic, view and download the report, view search history, delete a search record, reset a forgotten password. Verify a topic includes scraping the article and image (Wikipedia) and verifying the image with Gemini; Super mode check extends it. Reset password includes sending the reset email (mail server, optional, off by default). Admin only: manage user accounts, set a temporary password, view all users' searches, view the admin overview.](docs/images/usecase.png)
 
 Password reset spec: [docs/specs/password-recovery.md](docs/specs/password-recovery.md).
 
@@ -42,59 +37,53 @@ frontend-react/  React app (src/api/client.js is the only backend boundary)
 
 ### Functional requirements
 
-**Original Jira requirements**
+**Core requirements**
 
 | ID | Requirement | Implementation | Status |
 |---|---|---|---|
-| FR-01 | Authentication and authorization in the FastAPI backend | `/auth/login` issues a JWT and a refresh cookie. Every route except `/health` and the `/auth/login`, `/auth/refresh`, `/auth/logout` endpoints requires the JWT (`app/api/auth_dependencies.py`). | ✅ Implemented and tested |
-| FR-02 | Two user types: Admin and User | `user.role`, restricted to `admin` or `user` by a database CHECK constraint | ✅ Implemented and tested |
-| FR-03 | Admin can create and manage users | `/users`: create, list/search, edit name, role and active flag, reset password, delete (`app/api/user_routes.py`) | ✅ Implemented and tested |
-| FR-04 | Normal users access only authorized functionality | `require_admin` guards `/users/*` and `/admin/*`. Users see only their own history; another user's record returns 404. | ✅ Implemented and tested |
-| FR-05 | Search Wikipedia topics and receive image verification reports | `POST /search` runs scrape → download → Gemini → Markdown report (`app/services/pipeline_service.py`) | ⚠️ Implemented. Tested with fakes and offline stubs. **Real end-to-end run not yet recorded.** |
-| FR-06 | React frontend | `frontend-react/`: sign-in, verify, history, admin overview, user management | ⚠️ Implemented. Production build passes. **No recorded browser run against the live backend.** |
-| FR-07 | SQLite persistence and search history | `searchrecord` and `user` tables. History is paged and filterable (`app/api/history_routes.py`). | ✅ Implemented and tested |
+| FR-01 | Authentication and authorization in the FastAPI backend | `/auth/login` issues a JWT and a refresh cookie. Every route except `/health` and the `/auth/login`, `/auth/refresh`, `/auth/logout` endpoints requires the JWT (`app/api/auth_dependencies.py`). | ![Done](docs/images/icons/check.svg) Implemented and tested |
+| FR-02 | Two user types: Admin and User | `user.role`, restricted to `admin` or `user` by a database CHECK constraint | ![Done](docs/images/icons/check.svg) Implemented and tested |
+| FR-03 | Admin can create and manage users | `/users`: create, list/search, edit name, role and active flag, reset password, delete (`app/api/user_routes.py`) | ![Done](docs/images/icons/check.svg) Implemented and tested |
+| FR-04 | Normal users access only authorized functionality | `require_admin` guards `/users/*` and `/admin/*`. Users see only their own history; another user's record returns 404. | ![Done](docs/images/icons/check.svg) Implemented and tested |
+| FR-05 | Search Wikipedia topics and receive image verification reports | `POST /search` runs scrape → download → Gemini → Markdown report (`app/services/pipeline_service.py`) | ![Partial](docs/images/icons/warning.svg) Implemented. Tested with fakes and offline stubs. **Real end-to-end run not yet recorded.** |
+| FR-06 | React frontend | `frontend-react/`: sign-in, verify, history, admin overview, user management | ![Partial](docs/images/icons/warning.svg) Implemented. Production build passes. **No recorded browser run against the live backend.** |
+| FR-07 | SQLite persistence and search history | `searchrecord` and `user` tables. History is paged and filterable (`app/api/history_routes.py`). | ![Done](docs/images/icons/check.svg) Implemented and tested |
 
-**Added during development (engineering requirements, not in the Jira issue)**
+**Additional requirements**
 
 | ID | Requirement | Status |
 |---|---|---|
-| FR-08 | Admin-created and admin-reset passwords are temporary. The user must change the password before doing anything else, and the server enforces this. | ✅ Tested |
-| FR-09 | Users change their own password. Doing so signs out all their other sessions. | ✅ Tested |
-| FR-10 | Owner or admin can delete a history record. Deleting a user keeps their searches, unlinked, for admin review. | ✅ Tested |
-| FR-11 | Admin overview: users, searches by outcome, 30-day activity, top users, recent errors | ✅ Tested |
-| FR-12 | System status check of API, database, Gemini and Wikipedia (external checks cached for 60 s) | ✅ Tested (external checks mocked) |
-| FR-13 | Failed searches are saved as `ERROR` with a reference ID. Temporary Gemini outages return 503 "try again". | ✅ Tested |
-| FR-14 | Self-service password reset by a one-time email link (15 min). Admins set each user's email. Off by default. Spec: `docs/specs/password-recovery.md`. | ✅ Tested (fake mail sender). Verified once with real email (Gmail SMTP, dev machine, 2026-11-23). **Not yet tried on the server with the production mail account.** |
-| FR-15 | Users stay signed in across page reloads and past the 30-min access token, via a rotating refresh token in an HttpOnly cookie. Logout ends the sign-in on the server. Spec: `docs/specs/auth.md` AUTH-12..18. | ✅ Tested. **No browser run yet.** |
+| FR-08 | Admin-created and admin-reset passwords are temporary. The user must change the password before doing anything else, and the server enforces this. | ![Done](docs/images/icons/check.svg) Tested |
+| FR-09 | Users change their own password. Doing so signs out all their other sessions. | ![Done](docs/images/icons/check.svg) Tested |
+| FR-10 | Owner or admin can delete a history record. Deleting a user keeps their searches, unlinked, for admin review. | ![Done](docs/images/icons/check.svg) Tested |
+| FR-11 | Admin overview: users, searches by outcome, 30-day activity, top users, recent errors | ![Done](docs/images/icons/check.svg) Tested |
+| FR-12 | System status check of API, database, Gemini and Wikipedia (external checks cached for 60 s) | ![Done](docs/images/icons/check.svg) Tested (external checks mocked) |
+| FR-13 | Failed searches are saved as `ERROR` with a reference ID. Temporary Gemini outages return 503 "try again". | ![Done](docs/images/icons/check.svg) Tested |
+| FR-14 | Self-service password reset by a one-time email link (15 min). Admins set each user's email. Off by default. Spec: `docs/specs/password-recovery.md`. | ![Done](docs/images/icons/check.svg) Tested (fake mail sender). Verified once with real email (Gmail SMTP, dev machine, 2026-11-23). **Not yet tried on the server with the production mail account.** |
+| FR-15 | Users stay signed in across page reloads and past the 30-min access token, via a rotating refresh token in an HttpOnly cookie. Logout ends the sign-in on the server. Spec: `docs/specs/auth.md` AUTH-12..18. | ![Done](docs/images/icons/check.svg) Tested. **No browser run yet.** |
 
 ### Non-functional requirements
 
-The Jira issue specifies no non-functional requirements. All of the following
-are **engineering standards adopted for this project**, not approved
-acceptance criteria.
-
 | ID | Category | Requirement | Status |
 |---|---|---|---|
-| NFR-01 | Security | Passwords stored only as Argon2 hashes. At least 12 characters, and must not contain the username. | ✅ Tested |
-| NFR-02 | Security | JWT expires (default 30 min) and is checked for issuer and audience. A password change revokes old tokens. Refresh tokens: HttpOnly, `Secure`, `SameSite=Strict` cookie; only the SHA-256 is stored; rotated on every use; reuse of an old token signs the user out everywhere; sign-in ends after 8 h idle or 7 days. | ✅ Tested |
-| NFR-03 | Security | The app refuses to start without a `JWT_SECRET_KEY` of at least 32 characters. Secrets never go in code or the image. | ✅ Tested |
-| NFR-04 | Security | Rate limits: login per IP (10/min) and per username (5/min), token refresh per IP (30/min), searches per user (5/min), password changes. All configurable. | ✅ Tested |
-| NFR-05 | Security | Authorization enforced on the server. React hides admin screens for convenience only. | ✅ Tested |
-| NFR-06 | Reliability | Each Gemini request is cut off after 75 s. Temporary errors (408/429/5xx) are retried with backoff. The total wait is capped at 2× the timeout. | ✅ Tested (mocked) |
-| NFR-07 | Reliability | Gemini output is validated against a JSON schema. Truncated, repetitive or over-long answers are rejected. | ✅ Tested (mocked) |
-| NFR-08 | Data safety | Schema changes at startup only add tables and columns. Online backup script provided. | ✅ Tested |
-| NFR-09 | Performance | Lists use keyset pagination capped at 50 rows. Admin overview uses aggregate queries. | ✅ Paging tested. Measured up to 10,000 users and 100,000 searches; see [Performance](#7-testing--verification). |
-| NFR-10 | Testability | Tests use temporary databases and fake or stubbed Wikipedia and Gemini. They never touch `data/`. | ✅ Verified |
+| NFR-01 | Security | Passwords stored only as Argon2 hashes. At least 12 characters, and must not contain the username. | ![Done](docs/images/icons/check.svg) Tested |
+| NFR-02 | Security | JWT expires (default 30 min) and is checked for issuer and audience. A password change revokes old tokens. Refresh tokens: HttpOnly, `Secure`, `SameSite=Strict` cookie; only the SHA-256 is stored; rotated on every use; reuse of an old token signs the user out everywhere; sign-in ends after 8 h idle or 7 days. | ![Done](docs/images/icons/check.svg) Tested |
+| NFR-03 | Security | The app refuses to start without a `JWT_SECRET_KEY` of at least 32 characters. Secrets never go in code or the image. | ![Done](docs/images/icons/check.svg) Tested |
+| NFR-04 | Security | Rate limits: login per IP (10/min) and per username (5/min), token refresh per IP (30/min), searches per user (5/min), password changes. All configurable. | ![Done](docs/images/icons/check.svg) Tested |
+| NFR-05 | Security | Authorization enforced on the server. React hides admin screens for convenience only. | ![Done](docs/images/icons/check.svg) Tested |
+| NFR-06 | Reliability | Each Gemini request is cut off after 75 s. Temporary errors (408/429/5xx) are retried with backoff. The total wait is capped at 2× the timeout. | ![Done](docs/images/icons/check.svg) Tested (mocked) |
+| NFR-07 | Reliability | Gemini output is validated against a JSON schema. Truncated, repetitive or over-long answers are rejected. | ![Done](docs/images/icons/check.svg) Tested (mocked) |
+| NFR-08 | Data safety | Schema changes at startup only add tables and columns. Online backup script provided. | ![Done](docs/images/icons/check.svg) Tested |
+| NFR-09 | Performance | Lists use keyset pagination capped at 50 rows. Admin overview uses aggregate queries. | ![Done](docs/images/icons/check.svg) Paging tested. Measured up to 10,000 users and 100,000 searches; see [Performance](#7-testing--verification). |
+| NFR-10 | Testability | Tests use temporary databases and fake or stubbed Wikipedia and Gemini. They never touch `data/`. | ![Done](docs/images/icons/check.svg) Verified |
 
 ---
 
 ## 3. System Architecture
 
-![System architecture: Browser (React 19, Vite 7) calls a reverse proxy over HTTPS, which forwards to one Uvicorn process (Python 3.12, Docker). API layer: static frontend, REST routes, security (PyJWT, Argon2), in-memory rate limiter. Service layer: search pipeline, Playwright scraper, Gemini verifier, report, health check, refresh tokens, password reset, mail. Data layer: SQLModel/SQLAlchemy over SQLite, which CLI scripts also use. Services call Wikipedia and Gemini over HTTPS and an SMTP server over STARTTLS](docs/images/architecture.png)
+![System architecture: Browser (React 19, Vite 7) calls a reverse proxy over HTTPS, which forwards to one Uvicorn process (Python 3.12, Docker). API layer: static frontend, REST routes, security (PyJWT, Argon2), in-memory rate limiter. Service layer: search pipeline (scrape, verify, label check in Super mode, report), Playwright scraper, Gemini verifier (1 call, 2 in Super mode), label check, report, health check, refresh tokens, password reset, mail. Data layer: SQLModel/SQLAlchemy over SQLite, which CLI scripts also use. Services call Wikipedia and Gemini over HTTPS and an SMTP server over STARTTLS](docs/images/architecture.png)
 
 Arrows point from caller to callee; each reply returns on the same connection. Most routes query the database directly; search, sessions and password reset go through services.
-
-<sub>Source: [docs/images/architecture.py](docs/images/architecture.py) (also writes `architecture.svg`). Regenerate with `python docs/images/architecture.py`.</sub>
 
 In development, Vite serves React on `:5173` and forwards `/api` to FastAPI on
 `:8000`. In single-server mode, FastAPI serves the built app (`frontend-react/dist`)
@@ -114,7 +103,7 @@ on the same origin, so CORS is not needed.
 
 <!-- ![Verification modes: the scraped article, lead image and image labels feed three lanes. Standard mode, the default: one Gemini call sees image and article and returns description, reason and PASS/FAIL. Super mode (API value thorough): call 1 sees only the image and writes a blind description; call 2 sees image, article and that description and returns the verdict. Label check, plain code in Super mode only: do the caption, alt text or file name contain a title word. The result keeps Gemini's verdict; in Super mode it flags Needs review when the two disagree. Standard keeps the original report.](docs/images/verification.png)
 
-<sub>Source: [docs/images/verification.py](docs/images/verification.py). Regenerate with `python docs/images/verification.py`.</sub> -->
+-->
 
 Pipeline per mode:
 
@@ -122,17 +111,15 @@ Pipeline per mode:
 
 ![Super mode: Gemini call 1 sees only the image and writes the blind description. Gemini call 2 sees the image, the scraped details and the blind description, and returns the reason and PASS/FAIL. Separately, plain code checks whether the image labels (caption, alt text, file name) contain a title word; if that disagrees with the verdict, the result is marked Needs review. The labels never reach Gemini.](docs/images/mode-super.png)
 
-<sub>Source: [docs/images/modes.py](docs/images/modes.py). Regenerate with `python docs/images/modes.py`.</sub>
-
 | | Standard (default) | Super mode (API: `thorough`) |
 |---|---|---|
 | Gemini calls | 1 | 2 (about twice the time and cost) |
 | Image description | Written in the same call as the verdict, with the article in view | Written from the **image alone**, before Gemini sees the article |
 | Verdict | Image + article | Image + article + the blind description |
-| Label check and "Needs review" | ❌ | ✅ |
+| Label check and "Needs review" | ![No](docs/images/icons/cross.svg) | ![Yes](docs/images/icons/check.svg) |
 | Report | The original five sections, unchanged | Adds the mode, the description's source, a labels section and any review flag |
 
-- **Choosing a mode:** the **Super mode** switch on the Verify page (off = Standard), with an ⓘ panel explaining both modes. The API takes `"mode": "standard" | "thorough"` in `POST /search` (unknown mode → 422, nothing saved).
+- **Choosing a mode:** the **Super mode** switch on the Verify page (off = Standard), with an info panel explaining both modes. The API takes `"mode": "standard" | "thorough"` in `POST /search` (unknown mode → 422, nothing saved).
 - **Standard mode is unchanged:** same single call, same report and behaviour as before these features. Every new feature is in Super mode.
 - **Label check** (Super mode only; plain code, no AI): do the chosen image's caption, alt text or file name contain a significant word of the article title? Result: `agrees`, `unclear` or `no_labels`. "Unclear" is not a contradiction: BMW's caption, "Corporate logotype since 2021", never names BMW.
 - **The verdict always comes from Gemini.** The labels never change PASS/FAIL. **Needs review** is flagged only when the two disagree: FAIL while the labels name the subject, or PASS while they don't.
@@ -188,12 +175,12 @@ requirement. Where the original motivation was not recorded, the table says so.
 
 | Decision | Rationale | Trade-off / limitation |
 |---|---|---|
-| **React + FastAPI** | Both named in the Jira issue. FastAPI carries over the Task 02 backend and provides OpenAPI docs at `/docs`. | Two toolchains (Python, Node) to install. |
-| **SQLite** | Named in the Jira issue. A single file, no server to run. | One writer at a time, so the app must run as **one process** (see Limitations). |
+| **React + FastAPI** | Required stack. FastAPI reuses the existing backend and provides OpenAPI docs at `/docs`. | Two toolchains (Python, Node) to install. |
+| **SQLite** | Required storage. A single file, no server to run. | One writer at a time, so the app must run as **one process** (see Limitations). |
 | **SQLModel** | One class is both the table and the Pydantic model. *Why it was chosen over plain SQLAlchemy was not recorded.* | No Alembic. `app/db/migrations.py` can only add tables and columns. |
 | **Repository pattern** | `SearchRepository` keeps search-record SQL out of the route handlers. *Original motivation not recorded.* | Applied to search records only. User and admin routes query SQLModel directly. |
 | **JWT (HS256) + Argon2** | Stateless tokens with a 30-min expiry. A `token_version` claim lets a password change revoke old tokens. Argon2 is the `pwdlib` default and a memory-hard hash. | Access token is kept in React memory only (not `localStorage`). A rotating refresh token in an HttpOnly cookie restores the sign-in after a page reload and renews expired access tokens. |
-| **RBAC + user-owned records** | The Jira issue requires that normal users reach only what they are authorized for. Each search stores `user_id` taken from the token, never from the request. Non-owners get 404, so record IDs are not revealed. | Old records with no owner are visible only to admins. |
+| **RBAC + user-owned records** | Normal users must reach only what they are authorized for. Each search stores `user_id` taken from the token, never from the request. Non-owners get 404, so record IDs are not revealed. | Old records with no owner are visible only to admins. |
 | **Playwright** | Drives Wikipedia's own search box and reads the rendered page, so a search term resolves the way it does for a person. *Why Playwright rather than the Wikipedia API was not recorded.* | Needs a Chromium download. Slower than an API call. Breaks if Wikipedia changes its page structure. |
 | **Gemini `gemini-3.5-flash-lite`, thinking level `low`** | A code comment in `app/settings.py` says the previous model, `gemini-2.5-flash`, shuts down on 2026-12-01 and that this is its named replacement at the same price; the date and price have not been checked against Google's documentation. `scripts/model_compare.py` compared Flash-Lite at the `minimal`, `low` and `medium` thinking levels on 40 hand-labelled cases (2026-11-22). The final `low` run scored 40/40. | Only Flash-Lite variants were compared. The labels are the author's assumption, not human-reviewed. An earlier run had one near-miss error (Marie Curie article with Pierre Curie image judged a match). Override with `GEMINI_MODEL`. |
 | **Infobox data as JSON (`fields_json`)** | Infobox fields differ between articles (a person vs. a bridge), so they are stored as a key/value JSON text column. | Not queryable as columns. Fine, since it is only displayed. |
@@ -204,12 +191,7 @@ requirement. Where the original motivation was not recorded, the table says so.
 
 ## 5. Database & Security
 
-| Table | Key columns |
-|---|---|
-| `user` | `username` (unique), `hashed_password`, `role` (`admin` or `user`, CHECK constraint), `is_active`, `full_name`, `email` (optional, unique), `token_version`, `must_change_password`, `created_at` |
-| `searchrecord` | `query`, `status` (`PENDING`, `SUCCESS` or `ERROR`), `matches`, `article_title`, `source_url`, `image_url`, `fields_json`, `report_markdown`, `error_message`, `created_at` (UTC), `user_id` → `user.id` |
-| `refreshtoken` | `user_id` → `user.id`, `token_hash` (SHA-256 only), `family_id` (one sign-in), `token_version`, `expires_at` (idle), `family_expires_at` (absolute), `replaced_at`, `revoked_at` |
-| `passwordresettoken` | `user_id` → `user.id`, `token_hash` (SHA-256 only, never the token), `created_at`, `expires_at`, `used_at`, `requested_ip` |
+![Database ER diagram: four SQLite tables. user (id PK, username unique, hashed_password, role CHECK admin or user, is_active, created_at, full_name, token_version, must_change_password, email unique) owns zero or many searchrecord rows (id PK, query indexed, article and image fields, fields_json, status, matches, report_markdown, error_message, created_at, user_id FK nullable, verification_mode, label_check, needs_review) and has zero or many refreshtoken rows (token_hash unique SHA-256, family_id, token_version, expiry and rotation times) and passwordresettoken rows (token_hash unique SHA-256, expires_at, used_at, requested_ip). Deleting a user keeps their searches with user_id set to NULL and deletes their tokens.](docs/images/database.png)
 
 Tables are created, and missing columns added, automatically at startup.
 Default location: `data/search_history.db` (override with `DATABASE_PATH`).
@@ -238,20 +220,18 @@ Default location: `data/search_history.db` (override with `DATABASE_PATH`).
 
 ![Authentication sequence: login, access token expiry, silent refresh and retry, page reload restore, logout](docs/images/auth-flow.png)
 
-<sub>Source: [docs/images/auth-flow.mmd](docs/images/auth-flow.mmd). Regenerate with `npx @mermaid-js/mermaid-cli -i docs/images/auth-flow.mmd -o docs/images/auth-flow.png -b white -s 2`.</sub>
-
 **Authorization.**
 
 | Capability | User | Admin |
 |---|:-:|:-:|
-| Search topics, view and download reports | ✅ | ✅ |
-| View and delete own history | ✅ | ✅ |
-| View and delete **all** history (including unowned records) | — | ✅ |
-| Change own password | ✅ | ✅ |
-| Reset own forgotten password by email link (when enabled and an email is set) | ✅ | ✅ |
-| Create, edit, deactivate, delete users; set emails; reset passwords | — | ✅ |
-| Admin overview | — | ✅ |
-| System status | ✅ | ✅ |
+| Search topics, view and download reports | ![Yes](docs/images/icons/check.svg) | ![Yes](docs/images/icons/check.svg) |
+| View and delete own history | ![Yes](docs/images/icons/check.svg) | ![Yes](docs/images/icons/check.svg) |
+| View and delete **all** history (including unowned records) | ![No](docs/images/icons/minus.svg) | ![Yes](docs/images/icons/check.svg) |
+| Change own password | ![Yes](docs/images/icons/check.svg) | ![Yes](docs/images/icons/check.svg) |
+| Reset own forgotten password by email link (when enabled and an email is set) | ![Yes](docs/images/icons/check.svg) | ![Yes](docs/images/icons/check.svg) |
+| Create, edit, deactivate, delete users; set emails; reset passwords | ![No](docs/images/icons/minus.svg) | ![Yes](docs/images/icons/check.svg) |
+| Admin overview | ![No](docs/images/icons/minus.svg) | ![Yes](docs/images/icons/check.svg) |
+| System status | ![Yes](docs/images/icons/check.svg) | ![Yes](docs/images/icons/check.svg) |
 
 Safeguards: an admin cannot demote, deactivate, delete or reset-password
 themselves through user management, and at least one active admin must
@@ -338,7 +318,7 @@ no restart is needed after changing these settings.
 | Variable | Default | Purpose |
 |---|---|---|
 | `JWT_SECRET_KEY` | — (**required**, ≥ 32 chars) | Signs login tokens. Changing it signs everyone out. |
-| `GEMINI_API_KEY` | — | Without it the app starts, but searches fail. |
+| `GEMINI_API_KEY` | None | Without it the app starts, but searches fail. |
 | `GEMINI_MODEL` | `gemini-3.5-flash-lite` | Gemini model |
 | `GEMINI_THINKING_LEVEL` | `low` | `minimal`, `low`, `medium` or `high` (Gemini 3+) |
 | `GEMINI_TIMEOUT_SECONDS` | `75` | Per-request timeout (10–300) |
@@ -352,9 +332,9 @@ no restart is needed after changing these settings.
 | `VITE_API_BASE_URL` (`frontend-react/.env`) | `/api/v1` | API base path for React |
 | `VITE_DEMO_MODE` (`frontend-react/.env`) | `false` | UI preview with fake data. **Never enable for real use.** |
 | `PASSWORD_RESET_ENABLED` | `false` | Turns on password reset by email (also needs the three settings below) |
-| `SMTP_HOST` / `SMTP_FROM` / `APP_BASE_URL` | — | Mail server, sender address, and the app's public address used in reset links |
+| `SMTP_HOST` / `SMTP_FROM` / `APP_BASE_URL` | None | Mail server, sender address, and the app's public address used in reset links |
 | `SMTP_PORT` / `SMTP_STARTTLS` | `587` / `true` | Mail server port; encrypt the connection |
-| `SMTP_USERNAME` / `SMTP_PASSWORD` | — | Mail server login, if required (`SMTP_PASSWORD` is a secret) |
+| `SMTP_USERNAME` / `SMTP_PASSWORD` | None | Mail server login, if required (`SMTP_PASSWORD` is a secret) |
 | `PASSWORD_RESET_TOKEN_MINUTES` | `15` | How long a reset link works (5–60) |
 
 **Operations:**

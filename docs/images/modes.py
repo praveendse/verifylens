@@ -54,9 +54,9 @@ class Canvas:
 
 def standard() -> str:
     c = Canvas()
-    c.heading("STANDARD MODE", "· default (switch off) · 1 Gemini call · the task's requirement")
+    c.heading("STANDARD MODE", "default (switch off), 1 Gemini call")
     c.box(30, 70, 210, 60, ["Image", "lead image from Wikipedia"], **INPUT)
-    c.box(30, 190, 210, 70, ["Scraped details", "title · first paragraph", "infobox fields"], **INPUT)
+    c.box(30, 190, 210, 70, ["Scraped details", "title, first paragraph", "infobox fields"], **INPUT)
     c.box(390, 105, 240, 120, ["Gemini call", "sees: image + details", "describe the image, then", "decide if it shows the subject"], **AI)
     c.arrow([(240, 100), (310, 100), (310, 145), (386, 145)])
     c.arrow([(240, 225), (310, 225), (310, 185), (386, 185)])
@@ -66,17 +66,16 @@ def standard() -> str:
     c.arrow([(630, 165), (700, 165), (700, 85), (756, 85)])
     c.arrow([(700, 165), (756, 165)])
     c.arrow([(700, 165), (700, 245), (756, 245)])
-    c.text(24, 312, ["Blue: Gemini call.  Yellow: what the report shows.  One request: image and details together "
-                     "(Task 1, step 5)."], size=13, color=MUTED, anchor="start", bold_first=False)
+    c.text(24, 312, ["Blue: Gemini call.  Yellow: what the report shows.  One request with the image and details together."], size=13, color=MUTED, anchor="start", bold_first=False)
     return c.svg(1010, 330)
 
 
 def super_mode() -> str:
     c = Canvas()
-    c.heading("SUPER MODE", "· switch on · API value \"thorough\" · 2 Gemini calls + label check")
+    c.heading("SUPER MODE", "switch on, API value \"thorough\", 2 Gemini calls + label check")
     c.box(30, 70, 210, 60, ["Image", "lead image from Wikipedia"], **INPUT)
-    c.box(30, 250, 210, 70, ["Scraped details", "title · first paragraph", "infobox fields"], **INPUT)
-    c.box(30, 390, 210, 70, ["Image labels", "caption · alt text", "file name"], **INPUT)
+    c.box(30, 250, 210, 70, ["Scraped details", "title, first paragraph", "infobox fields"], **INPUT)
+    c.box(30, 390, 210, 70, ["Image labels", "caption, alt text", "file name"], **INPUT)
 
     c.box(330, 60, 230, 80, ["Gemini call 1", "sees: image ONLY"], **AI)
     c.box(650, 60, 230, 80, ["Blind description", "what the image shows", "(shown in the report)"], **OUTPUT)
