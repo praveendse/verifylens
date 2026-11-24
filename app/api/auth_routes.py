@@ -14,7 +14,7 @@ from app.db.models import User
 from app.dto.auth_models import AccessToken, PasswordChange, UserPublic
 from app.services import refresh_token_service as refresh_svc
 from app.services.password_reset_service import cancel_unused_tokens, utcnow
-from app.settings import Settings
+from app.config import Settings
 from security.password_policy import password_problem
 from security.passwords import hash_password, verify_password
 from security.tokens import create_access_token

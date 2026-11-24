@@ -17,7 +17,7 @@ from app.dto.auth_models import PasswordResetConfirm, PasswordResetRequest, Rese
 from app.dto.common import MessageResponse
 from app.services import password_reset_service as svc
 from app.services.mail_service import MailSender
-from app.settings import Settings
+from app.config import Settings
 from security.password_policy import password_problem
 from security.passwords import hash_password
 

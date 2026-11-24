@@ -10,7 +10,7 @@ from app.dto.models import ComponentStatus
 from app.main import app
 from app.services import health_service
 from app.services.health_service import SystemHealthService
-from app.settings import Settings
+from app.config import Settings
 
 
 def _component(name, status="ok", detail=None):

@@ -48,7 +48,7 @@ from app.services import gemini_service
 from app.services.gemini_service import describe_image, verify_image
 from app.services.label_check import check_labels, needs_review
 from app.services.wikipedia_service import download_infobox_image, scrape_article
-from app.settings import Settings
+from app.config import Settings
 
 OUT = Path("output/model_eval")
 CALL_TIMEOUT_MS = 90_000

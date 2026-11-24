@@ -4,7 +4,7 @@ from typing import TYPE_CHECKING, Literal
 from pydantic import BaseModel, ConfigDict, Field, field_validator
 
 if TYPE_CHECKING:
-    from app.settings import Settings
+    from app.config import Settings
 
 
 # --- Pipeline: data passed between scraper, Gemini, label check and report ---

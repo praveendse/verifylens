@@ -155,7 +155,7 @@ def test_gemini2_models_keep_a_thinking_budget(fake_gemini, image):
 
 
 def test_settings_default_to_a_supported_model(monkeypatch):
-    from app.settings import Settings
+    from app.config import Settings
 
     monkeypatch.delenv("GEMINI_MODEL", raising=False)
     monkeypatch.delenv("GEMINI_THINKING_LEVEL", raising=False)
@@ -166,7 +166,7 @@ def test_settings_default_to_a_supported_model(monkeypatch):
 
 def test_settings_reject_unknown_thinking_level(monkeypatch):
     from pydantic import ValidationError
-    from app.settings import Settings
+    from app.config import Settings
 
     monkeypatch.setenv("GEMINI_THINKING_LEVEL", "extreme")
     with pytest.raises(ValidationError):
@@ -434,7 +434,7 @@ def test_config_repr_never_shows_the_api_key():
 
 
 def test_config_from_settings():
-    from app.settings import Settings
+    from app.config import Settings
 
     settings = Settings(_env_file=None, gemini_api_key="k", gemini_model="gemini-x", gemini_thinking_level="high",
                         gemini_timeout_seconds=30)

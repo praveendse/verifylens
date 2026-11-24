@@ -5,7 +5,7 @@ from fastapi.testclient import TestClient
 
 from app.main import app
 from app.api.dependencies import get_pipeline_service
-from app.settings import Settings
+from app.config import Settings
 from app.services.pipeline_service import PipelineService
 
 

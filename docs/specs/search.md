@@ -82,6 +82,6 @@ jobs, storing the image itself.
    marked `ERROR` at startup?
 4. Is sending article text and images to Google Gemini approved under RAD's
    data policy?
-5. The model shutdown date and replacement in `app/settings.py` are not
+5. The model shutdown date and replacement in `app/config/settings.py` are not
    checked against Google's documentation. Who confirms them before
    2026-12-01?

@@ -8,7 +8,7 @@ import ssl
 from email.message import EmailMessage
 from typing import Protocol
 
-from app.settings import Settings
+from app.config import Settings
 
 SMTP_TIMEOUT_SECONDS = 10
 

@@ -13,7 +13,7 @@ services:
       # VPN in front. Change to "8000:8000" only on an isolated network.
       - "127.0.0.1:8000:8000"
     environment:
-      # Optional overrides (defaults in app/settings.py):
+      # Optional overrides (defaults in app/config/settings.py):
       # GEMINI_MODEL: gemini-3.5-flash-lite
       # SEARCHES_PER_USER_PER_MINUTE: "5"
       FORWARDED_ALLOW_IPS: "${FORWARDED_ALLOW_IPS:-127.0.0.1}"

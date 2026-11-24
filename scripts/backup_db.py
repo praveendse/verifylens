@@ -65,7 +65,7 @@ def backup(src: Path, dest_dir: Path, keep: int) -> Path:
 
 
 def main(argv: list[str] | None = None) -> int:
-    from app.settings import Settings
+    from app.config import Settings
 
     root = Path(__file__).resolve().parents[1]
     parser = argparse.ArgumentParser(description=__doc__.splitlines()[0])

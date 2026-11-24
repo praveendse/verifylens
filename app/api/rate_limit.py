@@ -16,7 +16,7 @@ from fastapi.security import OAuth2PasswordRequestForm
 
 from app.api.auth_dependencies import get_authenticated_user, get_current_user
 from app.db.models import User
-from app.settings import Settings
+from app.config import Settings
 
 
 class RateLimiter:

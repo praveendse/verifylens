@@ -3,7 +3,7 @@ from dataclasses import dataclass
 
 from playwright.sync_api import sync_playwright
 
-from app.settings import Settings
+from app.config import Settings
 from app.dto.models import (
     ArticleDTO,
     GeminiConfig,

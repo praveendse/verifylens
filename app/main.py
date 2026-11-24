@@ -8,7 +8,7 @@ from app.db.database import engine
 from app.db.migrations import upgrade_schema
 from app.api.routes import router
 from app.frontend import mount_frontend
-from app.settings import Settings
+from app.config import Settings
 from app.api.search_routes import router as search_router
 from app.api.history_routes import router as history_router
 from app.api.auth_routes import router as auth_router

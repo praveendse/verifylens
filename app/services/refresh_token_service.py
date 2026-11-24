@@ -13,7 +13,7 @@ from sqlmodel import Session, select
 
 from app.db.models import RefreshToken, User
 from app.services.password_reset_service import _as_utc, hash_token, utcnow
-from app.settings import Settings
+from app.config import Settings
 
 logger = logging.getLogger(__name__)
 

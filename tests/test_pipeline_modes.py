@@ -11,7 +11,7 @@ import pytest
 from app.dto.models import LabelCheckResult
 from app.services import pipeline_service
 from app.services.pipeline_service import PipelineService
-from app.settings import Settings
+from app.config import Settings
 
 ARTICLE = {
     "title": "Eiffel Tower", "paragraph": "The Eiffel Tower is a lattice tower in Paris.",

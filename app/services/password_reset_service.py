@@ -12,7 +12,7 @@ from sqlmodel import Session, select
 
 from app.db.models import PasswordResetToken, User
 from app.dto.auth_models import MailContent
-from app.settings import Settings
+from app.config import Settings
 
 PURGE_AFTER_DAYS = 7
 

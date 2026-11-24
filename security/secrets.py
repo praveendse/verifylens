@@ -27,7 +27,7 @@ def validate_secrets() -> None:
     """
     from pydantic import ValidationError
 
-    from app.settings import Settings
+    from app.config import Settings
     from security.tokens import JWTSettings
 
     try:

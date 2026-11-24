@@ -3,7 +3,7 @@ from typing import Annotated
 
 from fastapi import Depends
 
-from app.settings import Settings
+from app.config import Settings
 from app.services.health_service import SystemHealthService
 from app.services.mail_service import MailSender, SmtpMailSender
 from app.services.pipeline_service import PipelineService

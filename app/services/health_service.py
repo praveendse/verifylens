@@ -24,7 +24,7 @@ from sqlmodel import Session
 
 from app.db.database import engine
 from app.dto.models import ComponentStatus, SystemStatusResponse
-from app.settings import Settings
+from app.config import Settings
 
 EXTERNAL_TIMEOUT_SECONDS = 5
 EXTERNAL_CACHE_TTL_SECONDS = 60

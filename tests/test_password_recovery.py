@@ -20,7 +20,7 @@ from app.db.migrations import upgrade_schema
 from app.db.models import PasswordResetToken, User
 from app.main import app
 from app.services.password_reset_service import config_problem, purge_old_tokens
-from app.settings import Settings
+from app.config import Settings
 from security.passwords import hash_password
 
 ADMIN_PW = "secure-admin-pass-123"

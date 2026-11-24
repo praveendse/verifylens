@@ -7,6 +7,7 @@ from pydantic_settings import BaseSettings, SettingsConfigDict
 
 from security.secrets import secrets_dir
 
+PROJECT_ROOT = Path(__file__).resolve().parents[2]
 
 class Settings(BaseSettings):
 
@@ -26,11 +27,11 @@ class Settings(BaseSettings):
 
     # SQLite file (DATABASE_PATH). On a server, point this at a persistent
     # disk/volume that is backed up; see scripts/backup_db.py.
-    database_path: Path = Path(__file__).resolve().parents[1] / "data" / "search_history.db"
+    database_path: Path = PROJECT_ROOT / "data" / "search_history.db"
 
     # Built React app (npm run build). Served by FastAPI at "/" when the
     # folder exists, so site and API share one origin and need no CORS.
-    frontend_dist: Path = Path(__file__).resolve().parents[1] / "frontend-react" / "dist"
+    frontend_dist: Path = PROJECT_ROOT / "frontend-react" / "dist"
 
     # Rate limits (per server process, sliding one-minute window).
     login_attempts_per_ip_per_minute: int = Field(default=10, ge=1)
