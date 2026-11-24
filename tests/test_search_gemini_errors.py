@@ -16,7 +16,7 @@ class FailingPipeline:
     def __init__(self, exc):
         self.exc = exc
 
-    def generate_with_details(self, topic, work_dir):
+    def generate_with_details(self, topic, work_dir, mode="standard"):
         raise self.exc
 
 

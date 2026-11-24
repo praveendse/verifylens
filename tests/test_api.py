@@ -20,7 +20,7 @@ def test_legacy_report_route_is_removed():
         def generate(self, topic, work_dir):
             raise AssertionError("Pipeline must not run via /report")
 
-        def generate_with_details(self, topic, work_dir):
+        def generate_with_details(self, topic, work_dir, mode="standard"):
             raise AssertionError("Pipeline must not run via /report")
 
     app.dependency_overrides[get_pipeline_service] = lambda: ExplodingPipeline()

@@ -20,7 +20,7 @@ class FakePipeline:
     def __init__(self):
         self.runs = 0
 
-    def generate_with_details(self, topic: str, work_dir: Path):
+    def generate_with_details(self, topic: str, work_dir: Path, mode: str = "standard"):
         self.runs += 1
         report_path = work_dir / "report.md"
         report_path.write_text(f"# {topic}", encoding="utf-8")
@@ -34,6 +34,8 @@ class FakePipeline:
                 "fields": {},
             },
             verification={"description": "x", "matches": True, "reason": "x"},
+            labels={"status": "agrees", "matched_in": ["File name"]},
+            review_reason=None,
         )
 
 

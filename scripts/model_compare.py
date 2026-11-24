@@ -5,6 +5,12 @@ Labelled cases (article text + image):
   obvious   - the article with an unrelated article's image      -> expect False
   near-miss - the article with a similar-looking subject's image -> expect False
               (e.g. Albert Einstein + Isaac Newton, BMW + Mercedes-Benz)
+  look-alike match - a look-alike subject with its OWN image      -> expect True
+              (Viola, Violin, Leopard, Jaguar, alligator, crocodile)
+  look-alike swap  - the article with its look-alike's image      -> expect False
+              (Viola + Violin, Leopard + Jaguar, ...). Viola/violin differ mainly
+              in size, which a photo can't show, so those two swaps are expected
+              to fail: they measure the known limit, not a bug.
 
 Phase 1 scrapes every article and image ONCE into output/model_eval/cache, so
 every model sees identical inputs. Phase 2 calls the app's real verify_image
@@ -16,7 +22,12 @@ review of each image.
 
 Run:  python -m scripts.model_compare
       python -m scripts.model_compare --models gemini-3.5-flash-lite:low
-Costs real Gemini API calls (about 40 per model).
+      python -m scripts.model_compare --models gemini-3.5-flash-lite:low --mode thorough \
+          --cache output/model_eval/cache-current
+--mode thorough runs Super mode exactly as the app does: blind description
+(image only), then the verdict with it, then the label check on the image's
+own Wikipedia labels (caption, alt text, file name).
+Costs real Gemini API calls (52 per model in standard mode, 104 in thorough).
 """
 import argparse
 import json
@@ -33,7 +44,8 @@ from playwright.sync_api import sync_playwright
 from google.genai import types as genai_types
 
 from app.services import gemini_service
-from app.services.gemini_service import verify_image
+from app.services.gemini_service import describe_image, verify_image
+from app.services.label_check import check_labels, needs_review
 from app.services.wikipedia_service import download_infobox_image, scrape_article
 from app.settings import Settings
 
@@ -59,6 +71,13 @@ NEAR_MISS = [  # (article, image taken from)
     ("Eiffel Tower", "Tokyo Tower"), ("Taj Mahal", "Humayun's tomb"),
     ("Golden Gate Bridge", "San Francisco–Oakland Bay Bridge"), ("Marie Curie", "Pierre Curie"),
     ("Toyota", "Honda"), ("Western honey bee", "Vespula germanica"), ("Bald eagle", "Golden eagle"),
+]
+# Look-alikes (2026-11-24): pairs whose difference may or may not be visible.
+LOOKALIKE_TOPICS = ["Viola", "Violin", "Leopard", "Jaguar", "American alligator", "Nile crocodile"]
+LOOKALIKE_SWAP = [
+    ("Viola", "Violin"), ("Violin", "Viola"),                         # size only: not visible
+    ("Leopard", "Jaguar"), ("Jaguar", "Leopard"),                     # rosette pattern: visible
+    ("American alligator", "Nile crocodile"), ("Nile crocodile", "American alligator"),  # snout, teeth
 ]
 OBVIOUS = [
     ("Albert Einstein", "Giraffe"), ("Taj Mahal", "BMW"), ("Mount Everest", "Mona Lisa"),
@@ -87,7 +106,9 @@ def fetch_all(topics):
                     try:
                         article = scrape_article(page, topic)
                         image = download_infobox_image(page, article["image_url"], folder)
-                        article["image_file"] = image.name
+                        # Keep the scraper's image_file (Wikipedia's file name, a label
+                        # for the label check); the downloaded copy has its own key.
+                        article["local_image"] = image.name
                         (folder / "article.json").write_text(json.dumps(article, indent=2))
                         print(f"  ok   {topic} -> {article['title']}")
                     except Exception as exc:  # noqa: BLE001 - record and continue
@@ -107,7 +128,10 @@ def build_cases(articles):
     for t in MATCH_TOPICS:
         if t in articles:
             cases.append({"kind": "match", "article": t, "image": t, "expected": True})
-    for kind, pairs in (("near-miss", NEAR_MISS), ("obvious", OBVIOUS)):
+    for t in LOOKALIKE_TOPICS:
+        if t in articles:
+            cases.append({"kind": "look-alike match", "article": t, "image": t, "expected": True})
+    for kind, pairs in (("near-miss", NEAR_MISS), ("obvious", OBVIOUS), ("look-alike swap", LOOKALIKE_SWAP)):
         for a, i in pairs:
             if a in articles and i in articles:
                 cases.append({"kind": kind, "article": a, "image": i, "expected": False})
@@ -146,20 +170,31 @@ def _recording_client(api_key):
     return SimpleNamespace(models=_RecordingModels(client.models), _client=client)
 
 
-def run_case(case, articles, model, level, api_key):
+def run_case(case, articles, model, level, api_key, mode="standard"):
     article = articles[case["article"]]
     image_meta = articles[case["image"]]
-    image_path = CACHE / slug(case["image"]) / image_meta["image_file"]
+    # Older caches stored the downloaded name in image_file.
+    image_path = CACHE / slug(case["image"]) / image_meta.get("local_image", image_meta["image_file"])
     raw = _local.raw = []
     start = time.perf_counter()
-    result = {"model": f"{model}:{level}" if level else model, **case}
+    result = {"model": f"{model}:{level}" if level else model, "mode": mode, **case}
     for attempt in range(4):  # back off on rate limits / transient server errors
         raw.clear()
         try:
-            answer = verify_image(article, image_path, api_key=api_key, model=model,
-                                  **({"thinking_level": level} if level else {}))
+            kw = {"thinking_level": level} if level else {}
+            blind = describe_image(image_path, api_key=api_key, model=model, **kw) if mode == "thorough" else None
+            answer = verify_image(article, image_path, api_key=api_key, model=model, blind_description=blind, **kw)
             result.update(ok=True, predicted=answer["matches"], reason=answer["reason"],
                           description=answer["description"])
+            if mode == "thorough":
+                # The image's own labels, checked against the ARTICLE's title,
+                # exactly as the pipeline does for the scraped image.
+                labels = check_labels(article["title"], {"caption": image_meta.get("image_caption"),
+                                                         "alt": image_meta.get("image_alt"),
+                                                         "file": image_meta.get("image_file")
+                                                         if "local_image" in image_meta else None})
+                result.update(label_check=labels["status"],
+                              needs_review=needs_review(answer["matches"], labels["status"]) is not None)
             break
         except Exception as exc:  # noqa: BLE001
             msg = f"{type(exc).__name__}: {exc}"[:300]
@@ -199,9 +234,11 @@ def summarise(results, model):
         "accuracy": f"{len(correct)}/{len(ok)}" if ok else "-",
         "accuracy_pct": round(100 * len(correct) / len(ok), 1) if ok else None,
         "match": acc("match"), "near_miss": acc("near-miss"), "obvious": acc("obvious"),
+        "lookalike_match": acc("look-alike match"), "lookalike_swap": acc("look-alike swap"),
         "median_s": med("seconds"), "median_prompt_tokens": med("prompt_tokens"),
         "median_output_tokens": med("output_tokens"), "median_thinking_tokens": med("thinking_tokens"),
         "reason_first": f"{sum(order)}/{len(order)}" if order else "-",
+        "needs_review": sum(bool(r.get("needs_review")) for r in ok),
     }
 
 
@@ -209,17 +246,25 @@ def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--models", nargs="+", default=DEFAULT_MODELS, help="model or model:thinking_level")
     ap.add_argument("--workers", type=int, default=4)
+    ap.add_argument("--mode", choices=["standard", "thorough"], default="standard",
+                    help="thorough = Super mode: blind description + verdict + label check")
+    ap.add_argument("--cache", type=Path, default=None, help="scrape cache folder (default output/model_eval/cache)")
     args = ap.parse_args()
+    global CACHE
+    if args.cache:
+        CACHE = args.cache
 
     api_key = Settings().gemini_api_key
     if not api_key:
         sys.exit("GEMINI_API_KEY is not set (.env or environment).")
 
-    topics = sorted({t for t in MATCH_TOPICS} | {x for pair in NEAR_MISS + OBVIOUS for x in pair})
+    topics = sorted(set(MATCH_TOPICS) | set(LOOKALIKE_TOPICS)
+                    | {x for pair in NEAR_MISS + OBVIOUS + LOOKALIKE_SWAP for x in pair})
     articles, failed = fetch_all(topics)
     cases = build_cases(articles)
     print(f"{len(cases)} cases ({sum(c['kind'] == 'match' for c in cases)} match, "
-          f"{sum(c['kind'] == 'near-miss' for c in cases)} near-miss, {sum(c['kind'] == 'obvious' for c in cases)} obvious)"
+          f"{sum(c['kind'] == 'near-miss' for c in cases)} near-miss, {sum(c['kind'] == 'obvious' for c in cases)} obvious, "
+          f"{sum(c['kind'].startswith('look-alike') for c in cases)} look-alike)"
           + (f"; skipped topics: {', '.join(failed)}" if failed else ""))
 
     gemini_service.genai.Client = _recording_client  # installed once; per-thread sinks
@@ -232,7 +277,7 @@ def main():
     results = []
 
     def one(case, model, level):
-        r = run_case(case, articles, model, level, api_key)
+        r = run_case(case, articles, model, level, api_key, args.mode)
         with lock:
             results.append(r)
             with live.open("a") as fh:
@@ -256,10 +301,11 @@ def main():
     (OUT / f"results-{stamp}.json").write_text(json.dumps({"summary": summary, "results": results,
                                                             "fetch_failures": failed}, indent=2))
 
-    print(f"\n{'model':<32}{'accuracy':>10}{'match':>8}{'near':>7}{'obvious':>9}{'errors':>8}"
+    print(f"\n{'model':<32}{'accuracy':>10}{'match':>8}{'near':>7}{'obvious':>9}{'LA match':>10}{'LA swap':>9}{'errors':>8}"
           f"{'med s':>7}{'think tok':>10}{'out tok':>9}{'reason1st':>11}")
     for s in summary:
         print(f"{s['model']:<32}{s['accuracy']:>10}{s['match']:>8}{s['near_miss']:>7}{s['obvious']:>9}"
+              f"{s['lookalike_match']:>10}{s['lookalike_swap']:>9}"
               f"{s['errors']:>8}{s['median_s'] or 0:>7.1f}{s['median_thinking_tokens'] or 0:>10.0f}"
               f"{s['median_output_tokens'] or 0:>9.0f}{s['reason_first']:>11}")
 

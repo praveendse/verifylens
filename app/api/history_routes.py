@@ -106,6 +106,10 @@ def get_search_history_detail(
         "image_url": record.image_url,
         "fields": json.loads(record.fields_json) if record.fields_json else {},
         "report_markdown": record.report_markdown,
+        # NULL on records saved before modes and the label check existed.
+        "verification_mode": record.verification_mode,
+        "label_check": record.label_check,
+        "needs_review": record.needs_review,
         # Plain-language reason, never the stored code.
         "error_message": describe(record.error_message)[1] if record.status == "ERROR" else None,
         "created_at": record.created_at,

@@ -67,11 +67,12 @@ export const demo = {
     if (!record) throw new Error('Report not found or access denied.');
     return record;
   },
-  async search(token, topic) {
+  async search(token, topic, mode = 'standard') {
     await delay(1000);
     const user = users.find(u => u.username === token.replace('demo-', ''));
     const record = {
       id: nextId++, query: topic, article_title: topic, status: 'SUCCESS', matches: true,
+      verification_mode: mode, label_check: 'agrees', needs_review: false,
       image_url: '', fields: { Topic: topic, Source: 'Demo preview only' },
       report_markdown: `# ${topic}\n\n## Verification summary\n\n**Match Status: PASS (DEMO ONLY)**\n\nThis example was generated locally for a UI preview. No actual Wikipedia scraping or Gemini verification occurred.`,
       created_at: new Date().toISOString(), user_id: user?.id,

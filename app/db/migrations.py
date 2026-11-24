@@ -21,6 +21,9 @@ ADDED_COLUMNS = (
     ("user", "must_change_password", "BOOLEAN NOT NULL DEFAULT 0"),
     ("searchrecord", "user_id", "INTEGER REFERENCES user(id)"),
     ("user", "email", "TEXT"),
+    ("searchrecord", "label_check", "TEXT"),
+    ("searchrecord", "needs_review", "BOOLEAN"),
+    ("searchrecord", "verification_mode", "TEXT"),
 )
 
 

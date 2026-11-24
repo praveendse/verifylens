@@ -38,7 +38,9 @@ class SearchRepository:
         fields: dict[str, str],
         matches: bool,
         report_markdown: str,
-        
+        label_check: str | None = None,
+        needs_review: bool | None = None,
+        verification_mode: str | None = None,
     ) -> SearchRecord:
 
         record.article_title = article_title
@@ -53,6 +55,9 @@ class SearchRepository:
 
         record.matches = matches
         record.report_markdown = report_markdown
+        record.label_check = label_check
+        record.needs_review = needs_review
+        record.verification_mode = verification_mode
 
         record.status = "SUCCESS"
         record.error_message = None

@@ -69,6 +69,22 @@ RESPONSE_SCHEMA = {
 }
 
 
+# Thorough mode, call 1: the image alone, so the description cannot be
+# steered by the article text (spec SRCH-15).
+DESCRIPTION_SCHEMA = {
+    "type": "OBJECT",
+    "properties": {"description": {"type": "STRING", "maxLength": MAX_DESCRIPTION_CHARS}},
+    "required": ["description"],
+}
+
+DESCRIBE_PROMPT = """
+Describe what this image shows in 1-2 sentences: its main subject and any
+text visible in it. If you recognise a specific person, place, organisation,
+object or species, name it; otherwise say what kind of thing it is.
+Describe only what is visible. Do not repeat yourself.
+"""
+
+
 def thinking_config(model: str, level: str = DEFAULT_THINKING_LEVEL) -> types.ThinkingConfig:
     """Thinking settings for the model generation.
 
@@ -144,9 +160,8 @@ def _has_repetition_loop(text: str) -> bool:
     return max(ngrams.values()) >= REPEAT_NGRAM_THRESHOLD
 
 
-def _validate_result(response) -> dict:
-    """Parse and sanity-check a Gemini response. Raises GeminiVerificationError."""
-
+def _parse_json(response) -> dict:
+    """The response as a JSON object. Raises GeminiVerificationError."""
     candidates = getattr(response, "candidates", None) or []
     finish_reason = getattr(candidates[0], "finish_reason", None) if candidates else None
     if finish_reason == types.FinishReason.MAX_TOKENS:
@@ -161,6 +176,33 @@ def _validate_result(response) -> dict:
         result = json.loads(response.text)
     except json.JSONDecodeError as exc:
         raise GeminiVerificationError(f"Gemini returned invalid JSON: {exc}") from exc
+    if not isinstance(result, dict):
+        raise GeminiVerificationError("Invalid Gemini verification response")
+    return result
+
+
+def _check_text(name: str, value: str, max_chars: int) -> None:
+    # Loop check first: it is the more specific diagnosis for logs.
+    if _has_repetition_loop(value):
+        raise GeminiVerificationError(f"Gemini {name} contains a repetition loop")
+    if len(value) > max_chars:
+        raise GeminiVerificationError(f"Gemini {name} too long ({len(value)} chars > {max_chars})")
+
+
+def _validate_description(response) -> str:
+    """The blind description. Raises GeminiVerificationError."""
+    result = _parse_json(response)
+    description = result.get("description")
+    if not isinstance(description, str) or not description.strip():
+        raise GeminiVerificationError("Invalid Gemini description response")
+    description = description.strip()
+    _check_text("description", description, MAX_DESCRIPTION_CHARS)
+    return description
+
+
+def _validate_result(response) -> dict:
+    """Parse and sanity-check a Gemini response. Raises GeminiVerificationError."""
+    result = _parse_json(response)
 
     if (
         not isinstance(result, dict)
@@ -175,19 +217,8 @@ def _validate_result(response) -> dict:
     description = result["description"].strip()
     reason = result["reason"].strip()
 
-    for name, value, max_chars in (
-        ("description", description, MAX_DESCRIPTION_CHARS),
-        ("reason", reason, MAX_REASON_CHARS),
-    ):
-        # Loop check first: it is the more specific diagnosis for logs.
-        if _has_repetition_loop(value):
-            raise GeminiVerificationError(
-                f"Gemini {name} contains a repetition loop"
-            )
-        if len(value) > max_chars:
-            raise GeminiVerificationError(
-                f"Gemini {name} too long ({len(value)} chars > {max_chars})"
-            )
+    _check_text("description", description, MAX_DESCRIPTION_CHARS)
+    _check_text("reason", reason, MAX_REASON_CHARS)
 
     if len(reason.split()) > MAX_REASON_WORDS * 2:
         # Prompt asks for <= MAX_REASON_WORDS; allow slack, reject far overruns.
@@ -198,6 +229,76 @@ def _validate_result(response) -> dict:
     return {"description": description, "matches": result["matches"], "reason": reason}
 
 
+def _ask(client, *, model: str, contents, config: types.GenerateContentConfig,
+         timeout_s: float, validate):
+    """One validated answer: up to MAX_ATTEMPTS tries within one time budget."""
+    deadline = time.monotonic() + timeout_s * TOTAL_BUDGET_FACTOR
+    last_error: GeminiVerificationError | None = None
+    for attempt in range(1, MAX_ATTEMPTS + 1):
+        response = _generate(
+            client, model=model, contents=contents, config=config,
+            timeout_s=timeout_s, deadline=deadline,
+        )
+        try:
+            return validate(response)
+        except GeminiVerificationError as exc:
+            last_error = exc
+            logger.warning(
+                "Gemini answer attempt %d/%d rejected: %s",
+                attempt, MAX_ATTEMPTS, exc,
+            )
+
+    raise GeminiVerificationError(
+        f"Gemini verification failed after {MAX_ATTEMPTS} attempts: {last_error}"
+    ) from last_error
+
+
+def _image_part(image_path: Path) -> types.Part:
+    mime_type, _ = mimetypes.guess_type(image_path.name)
+    if not mime_type:
+        raise ValueError("Could not identify image type")
+    return types.Part.from_bytes(data=image_path.read_bytes(), mime_type=mime_type)
+
+
+def describe_image(
+    image_path: Path,
+    *,
+    api_key: str,
+    model: str,
+    thinking_level: str = DEFAULT_THINKING_LEVEL,
+    timeout_s: float = DEFAULT_TIMEOUT_S,
+) -> str:
+    """Thorough mode, call 1: describe the image without seeing the article.
+
+    Same timeouts, retries and output checks as verify_image.
+    """
+    if not api_key:
+        raise ValueError("Gemini API key not found")
+    config = types.GenerateContentConfig(
+        response_mime_type="application/json",
+        response_schema=types.Schema.model_validate(DESCRIPTION_SCHEMA),
+        max_output_tokens=MAX_OUTPUT_TOKENS,
+        thinking_config=thinking_config(model, thinking_level),
+    )
+    return _ask(
+        genai.Client(api_key=api_key), model=model,
+        contents=[DESCRIBE_PROMPT, _image_part(image_path)],
+        config=config, timeout_s=timeout_s, validate=_validate_description,
+    )
+
+
+def _independent_view(blind_description: str | None) -> str:
+    """Prompt section for thorough mode; empty in standard mode."""
+    if not blind_description:
+        return ""
+    return (
+        "Independent description:\n"
+        "    A separate request described this image WITHOUT seeing the article:\n"
+        f'    "{blind_description}"\n'
+        "    Use it as a second view of the image, but decide from the image itself.\n"
+    )
+
+
 def verify_image(
     article: dict,
     image_path: Path,
@@ -206,8 +307,13 @@ def verify_image(
     model: str,
     thinking_level: str = DEFAULT_THINKING_LEVEL,
     timeout_s: float = DEFAULT_TIMEOUT_S,
+    blind_description: str | None = None,
 ) -> dict:
     """Verify that the image shows the article's subject, using Gemini.
+
+    With blind_description (thorough mode) the prompt includes the
+    description written without the article, and the result's description
+    is that blind one.
 
     Raises GeminiUnavailableError when Gemini can't be reached in time and
     GeminiVerificationError when its answer can't be trusted.
@@ -216,10 +322,7 @@ def verify_image(
     if not api_key:
         raise ValueError("Gemini API key not found")
 
-    mime_type, _ = mimetypes.guess_type(image_path.name)
-
-    if not mime_type:
-        raise ValueError("Could not identify image type")
+    image_part = _image_part(image_path)
 
     fields = article["fields"]
 
@@ -269,7 +372,16 @@ def verify_image(
       competitor's logo; or a generic picture of the subject area.
     - Judge only what is visible. Do not assume the image matches just
       because the article information was provided.
+    - Look-alikes: use the First Paragraph to decide what kind of thing the
+      subject is and which visible features set it apart from similar
+      things, then check the image for those features.
+      * If something visible shows it is a different thing, matches = false.
+      * If those features cannot be seen (for example the size or scale that
+        separates two similar instruments or species) but nothing visible
+        contradicts the article, matches = true, and the reason must say that
+        the exact identity cannot be confirmed from the image alone.
 
+    {_independent_view(blind_description)}
     Tasks:
     1. description: Describe what is visible in the image
        in 1-2 sentences.
@@ -281,9 +393,6 @@ def verify_image(
        and is consistent with your reason.
     """
 
-    client = genai.Client(api_key=api_key)
-    deadline = time.monotonic() + timeout_s * TOTAL_BUDGET_FACTOR
-
     config = types.GenerateContentConfig(
         response_mime_type="application/json",
         # Validate locally so a typo in a schema key fails here instead of
@@ -292,29 +401,11 @@ def verify_image(
         max_output_tokens=MAX_OUTPUT_TOKENS,
         thinking_config=thinking_config(model, thinking_level),
     )
-    contents = [
-        prompt,
-        types.Part.from_bytes(
-            data=image_path.read_bytes(),
-            mime_type=mime_type,
-        ),
-    ]
-
-    last_error: GeminiVerificationError | None = None
-    for attempt in range(1, MAX_ATTEMPTS + 1):
-        response = _generate(
-            client, model=model, contents=contents, config=config,
-            timeout_s=timeout_s, deadline=deadline,
-        )
-        try:
-            return _validate_result(response)
-        except GeminiVerificationError as exc:
-            last_error = exc
-            logger.warning(
-                "Gemini verification attempt %d/%d rejected: %s",
-                attempt, MAX_ATTEMPTS, exc,
-            )
-
-    raise GeminiVerificationError(
-        f"Gemini verification failed after {MAX_ATTEMPTS} attempts: {last_error}"
-    ) from last_error
+    result = _ask(
+        genai.Client(api_key=api_key), model=model,
+        contents=[prompt, image_part], config=config,
+        timeout_s=timeout_s, validate=_validate_result,
+    )
+    if blind_description:
+        result["description"] = blind_description
+    return result

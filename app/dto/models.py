@@ -16,6 +16,10 @@ class ArticleDTO(BaseModel):
     source_url: str
     image_url: str
     fields: dict[str, str]
+    # Wikipedia's own labels for the image (spec SRCH-14); any may be missing.
+    image_caption: str | None = None
+    image_alt: str | None = None
+    image_file: str | None = None
 
 class VerificationDTO(BaseModel):
     description: str
@@ -44,8 +48,14 @@ class SystemStatusResponse(BaseModel):
 
 # create DTO for file response
 
+VerificationMode = Literal["standard", "thorough"]
+
+
 class SearchRequest(BaseModel):
     topic: str = Field(min_length=1, max_length=200)
+    # Spec SRCH-15: "thorough" adds a blind image description (a second
+    # Gemini call: about twice the time and cost). Default "standard".
+    mode: VerificationMode = "standard"
 
     @field_validator("topic")
     @classmethod
@@ -66,3 +76,8 @@ class SearchResponse(BaseModel):
 
     image_url: str | None = None
     fields: dict[str, str] = Field(default_factory=dict)
+    verification_mode: VerificationMode | None = None
+    # Label check (spec SRCH-14)
+    label_check: Literal["agrees", "unclear", "no_labels"] | None = None
+    needs_review: bool | None = None
+    review_reason: str | None = None

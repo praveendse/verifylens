@@ -496,14 +496,6 @@ h1, h2, h3 { font-family: inherit; }
 .search-input-container input { flex: 1; min-width: 0; height: var(--btn-h); border: 0 !important; box-shadow: none !important; background: transparent; color: var(--text); font-size: 15px; }
 .search-input-container input::placeholder { color: var(--placeholder); }
 .search-submit { flex-shrink: 0; }
-.search-suggestions { display: flex; align-items: center; flex-wrap: wrap; gap: 9px; margin-top: 17px; padding-left: 8px; }
-.search-suggestions > span { margin-right: 4px; font-size: 11px; letter-spacing: 1.1px; font-weight: 700; color: var(--subtle); }
-.search-suggestions button {
-  display: flex; align-items: center; gap: 5px; padding: 7px 14px; border-radius: var(--pill);
-  background: var(--btn-soft); border: 1px solid var(--btn-soft-border); box-shadow: var(--btn-soft-shadow); color: var(--muted); font-size: 12px;
-}
-.search-suggestions button:hover:not(:disabled) { background: var(--btn-soft-hover); border-color: var(--btn-soft-border-hover); color: var(--forest); }
-.search-suggestions button:active:not(:disabled) { box-shadow: var(--btn-soft-shadow-active); }
 .how-works { margin-top: 79px; }
 .how-works-heading h2 { margin: 13px 0 25px; font-size: 24px; letter-spacing: -0.025em; }
 /* Icon flow: big icon circles joined by arrows, title only */
@@ -756,9 +748,7 @@ html:has(.record-dialog[open]) { overflow: hidden; } /* no page scroll behind th
   .search-input-container > svg { margin-left: 12px; }
   .search-input-container input { flex: 1 1 0; width: auto; min-width: 0; }
   .search-submit { flex-basis: 100%; }
-  .search-suggestions > span { width: 100%; }
-  .search-suggestions .suggest-extra { display: none; } /* phones: only the short picks */
-  .history-tools { flex-direction: column; }
+    .history-tools { flex-direction: column; }
   .history-search, .history-tools select { width: 100%; }
   .admin-form-two { grid-template-columns: 1fr; }
   .report-head { flex-direction: column; align-items: flex-start; }
@@ -771,3 +761,46 @@ html:has(.record-dialog[open]) { overflow: hidden; } /* no page scroll behind th
 @media (prefers-reduced-motion: reduce) {
   *, *::before, *::after { animation-duration: .01ms !important; transition: none !important; }
 }
+/* Verification mode: Super mode switch + info panel (spec SRCH-15) */
+.mode-row { display: flex; align-items: center; flex-wrap: wrap; gap: 8px 12px; margin-top: 15px; padding-left: 8px; }
+.mode-toggle { display: inline-flex; align-items: center; gap: 10px; padding: 4px 6px 4px 4px; border: 0; background: none; color: var(--text); cursor: pointer; border-radius: var(--pill); }
+.mode-toggle:focus-visible { outline: 2px solid var(--ink); outline-offset: 2px; }
+.mode-toggle:disabled { opacity: .55; cursor: not-allowed; }
+.mode-toggle-track { position: relative; width: 42px; height: 24px; border-radius: var(--pill); background: var(--border-strong); transition: background .18s ease; flex-shrink: 0; }
+.mode-toggle-thumb { position: absolute; top: 3px; left: 3px; width: 18px; height: 18px; border-radius: 50%; background: #fff; box-shadow: 0 1px 3px rgba(9, 9, 11, .3); transition: transform .18s ease; }
+.mode-toggle[aria-checked="true"] .mode-toggle-track { background: var(--ink); }
+.mode-toggle[aria-checked="true"] .mode-toggle-thumb { transform: translateX(18px); }
+.mode-toggle-label { font-size: 14px; font-weight: 600; }
+.mode-info-anchor { position: relative; }
+.mode-info-button { display: grid; place-items: center; width: 28px; height: 28px; border-radius: 50%; border: 1px solid var(--border-strong); background: var(--surface); color: var(--muted); cursor: pointer; }
+.mode-info-button:hover, .mode-info-button[aria-expanded="true"] { color: var(--forest); border-color: var(--ink); }
+.mode-info-button:focus-visible { outline: 2px solid var(--ink); outline-offset: 2px; }
+.mode-info {
+  position: absolute; z-index: 30; top: calc(100% + 8px); left: 50%; transform: translateX(-50%); width: min(380px, calc(100vw - 32px));
+  padding: 14px 16px; border-radius: var(--r-inner); background: var(--surface); border: 1px solid var(--border-strong);
+  box-shadow: 0 18px 45px -18px rgba(9, 9, 11, .35); text-align: left;
+}
+.mode-info-head { display: flex; align-items: center; justify-content: space-between; margin-bottom: 8px; }
+.mode-info-head strong { font-size: 14px; }
+.mode-info-close { display: grid; place-items: center; width: 26px; height: 26px; border-radius: 50%; border: 0; background: none; color: var(--muted); cursor: pointer; }
+.mode-info-close:hover { background: var(--surface-2); }
+.mode-info-item { padding: 9px 0; border-top: 1px solid var(--border); }
+.mode-info-title { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
+.mode-info-title span { font-size: 13.5px; font-weight: 700; color: var(--forest); }
+.mode-info-title small { padding: 2px 8px; border-radius: var(--pill); background: var(--surface-2); color: var(--muted); font-size: 11px; font-weight: 600; }
+.mode-info-item ul { margin: 6px 0 0; padding-left: 18px; color: var(--text); font-size: 12.5px; line-height: 1.5; }
+.mode-info-foot { margin: 0; padding-top: 9px; border-top: 1px solid var(--border); color: var(--muted); font-size: 12px; line-height: 1.5; }
+/* The card's backdrop-filter makes its own stacking context: lift the whole
+   card so the open panel stays above the "How it works" section below it. */
+.search-surface { position: relative; z-index: 5; }
+/* Phones: span the panel across the card instead of hanging off the small i button. */
+@media (max-width: 640px) {
+  .mode-row { position: relative; }
+  .mode-info-anchor { position: static; }
+  .mode-info { left: 0; right: 0; width: auto; transform: none; }
+}
+
+/* Verdict and labels disagree (spec SRCH-14) */
+.review-note { display: flex; gap: 11px; margin: -8px 0 20px; padding: 13px 16px; border-radius: var(--r-inner); background: var(--warn-bg); border: 1px solid var(--warn-line); color: var(--warn); }
+.review-note strong { display: block; font-size: 14px; }
+.review-note p { margin: 3px 0 0; color: var(--text); font-size: 13px; }
