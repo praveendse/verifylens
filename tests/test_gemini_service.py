@@ -345,3 +345,77 @@ def test_unknown_image_type_raises(fake_gemini, tmp_path):
     fake_gemini()
     with pytest.raises(ValueError, match="image type"):
         run(path)
+
+
+# --- Thorough mode: blind description (SRCH-15) --------------------------------
+
+BLIND = "A red and white oval badge with the letters EB and the word BUGATTI."
+
+
+def describe(image):
+    return gemini_service.describe_image(image, api_key="test-key", model="gemini-test")
+
+
+def test_blind_description_sees_only_the_image(fake_gemini, image):
+    models = fake_gemini(make_response({"description": BLIND}))
+
+    assert describe(image) == BLIND
+    prompt, image_part = models.calls[0]["contents"]
+    # Nothing from the article reaches the blind call.
+    for leaked in (ARTICLE["title"], ARTICLE["paragraph"], "Ettore", "1909"):
+        assert leaked not in prompt
+    assert isinstance(image_part, types.Part)
+    schema = models.calls[0]["config"].response_schema
+    assert list(schema.properties) == ["description"]
+
+
+def test_blind_description_output_is_checked_and_retried(fake_gemini, image):
+    looping = "badge logo badge logo " * 20
+    models = fake_gemini(make_response({"description": looping}), make_response({"description": f"  {BLIND} "}))
+
+    assert describe(image) == BLIND  # trimmed
+    assert len(models.calls) == 2
+
+
+@pytest.mark.parametrize("bad", [{"description": ""}, {"other": "x"}, {"description": "x" * 900}])
+def test_bad_blind_descriptions_fail_after_max_attempts(fake_gemini, image, bad):
+    fake_gemini(*[make_response(bad)] * MAX_ATTEMPTS)
+    with pytest.raises(GeminiVerificationError):
+        describe(image)
+
+
+def test_blind_description_needs_an_api_key(image):
+    with pytest.raises(ValueError):
+        gemini_service.describe_image(image, api_key="", model="gemini-test")
+
+
+def test_verdict_prompt_includes_the_blind_description_and_report_uses_it(fake_gemini, image):
+    models = fake_gemini(make_response(GOOD))
+
+    result = verify_image(ARTICLE, image, api_key="test-key", model="gemini-test", blind_description=BLIND)
+
+    prompt = models.calls[0]["contents"][0]
+    assert BLIND in prompt and "WITHOUT seeing the article" in prompt
+    assert result["description"] == BLIND  # the report shows the independent one
+    assert result["matches"] is True and result["reason"] == GOOD["reason"]
+
+
+def test_standard_mode_prompt_has_no_independent_description(fake_gemini, image):
+    models = fake_gemini(make_response(GOOD))
+    assert run(image) == GOOD
+    assert "Independent description" not in models.calls[0]["contents"][0]
+
+
+def test_prompt_handles_look_alikes_without_trusting_the_text(fake_gemini, image):
+    """Viola/violin case: distinguishing features come from the first paragraph;
+    unconfirmable but uncontradicted is a match with an honest reason; a visible
+    difference is a mismatch. Applies to both modes (same verdict prompt)."""
+    for blind in (None, "A violin-family instrument."):
+        models = fake_gemini(make_response(GOOD))
+        verify_image(ARTICLE, image, api_key="test-key", model="gemini-test", blind_description=blind)
+        prompt = " ".join(models.calls[0]["contents"][0].split())
+        assert "use the First Paragraph to decide what kind of thing the subject is" in prompt
+        assert "If something visible shows it is a different thing, matches = false." in prompt
+        assert "nothing visible contradicts the article, matches = true" in prompt
+        assert "cannot be confirmed from the image alone" in prompt
+        assert "Do not assume the image matches just because the article information was provided." in prompt

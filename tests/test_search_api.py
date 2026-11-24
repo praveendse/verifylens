@@ -22,12 +22,17 @@ class FakePipeline:
 
     def __init__(self):
         self.fail = False
+        self.label_status = "agrees"
+        self.review_reason = None
+        self.modes = []
 
     def generate_with_details(
         self,
         topic: str,
         work_dir: Path,
+        mode: str = "standard",
     ):
+        self.modes.append(mode)
         if self.fail:
             raise RuntimeError("Simulated pipeline failure")
 
@@ -56,6 +61,9 @@ class FakePipeline:
                 "matches": True,
                 "reason": "Matches the article.",
             },
+            # Like the real pipeline: the label check runs in super mode only
+            labels={"status": self.label_status, "matched_in": []} if mode == "thorough" else None,
+            review_reason=self.review_reason if mode == "thorough" else None,
         )
 
 
@@ -221,3 +229,73 @@ def test_empty_topic(test_setup):
         ).all()
 
         assert len(records) == 0
+
+
+# Verification modes (SRCH-15) and the label check (SRCH-14)
+def test_mode_defaults_to_standard_and_is_stored(test_setup):
+    client, engine, fake_pipeline = test_setup
+
+    data = client.post("/api/v1/search", json={"topic": "BMW"}).json()
+
+    assert fake_pipeline.modes == ["standard"]
+    assert data["verification_mode"] == "standard"
+    with Session(engine) as session:
+        assert session.get(SearchRecord, data["id"]).verification_mode == "standard"
+
+
+def test_thorough_mode_is_passed_to_the_pipeline_and_shown_in_history(test_setup):
+    client, engine, fake_pipeline = test_setup
+
+    data = client.post("/api/v1/search", json={"topic": "BMW", "mode": "thorough"}).json()
+
+    assert fake_pipeline.modes == ["thorough"]
+    assert data["verification_mode"] == "thorough"
+    detail = client.get(f"/api/v1/history/{data['id']}").json()
+    assert detail["verification_mode"] == "thorough"
+
+
+def test_unknown_mode_is_rejected_before_anything_runs(test_setup):
+    client, engine, fake_pipeline = test_setup
+
+    response = client.post("/api/v1/search", json={"topic": "BMW", "mode": "extreme"})
+
+    assert response.status_code == 422
+    assert fake_pipeline.modes == []
+    with Session(engine) as session:
+        assert session.exec(select(SearchRecord)).all() == []
+
+
+def test_label_check_and_review_flag_are_stored_and_returned(test_setup):
+    client, engine, fake_pipeline = test_setup
+    fake_pipeline.label_status = "unclear"
+    fake_pipeline.review_reason = "The image was judged a match, but none of Wikipedia's labels name the subject."
+
+    data = client.post("/api/v1/search", json={"topic": "BMW", "mode": "thorough"}).json()
+
+    assert data["label_check"] == "unclear"
+    assert data["needs_review"] is True
+    assert data["review_reason"] == fake_pipeline.review_reason
+    assert data["matches"] is True  # the verdict itself is unchanged
+    with Session(engine) as session:
+        record = session.get(SearchRecord, data["id"])
+        assert (record.label_check, record.needs_review) == ("unclear", True)
+
+
+def test_no_review_flag_when_the_checks_agree(test_setup):
+    client, _, _ = test_setup
+    data = client.post("/api/v1/search", json={"topic": "BMW", "mode": "thorough"}).json()
+    assert data["label_check"] == "agrees"
+    assert data["needs_review"] is False
+    assert data["review_reason"] is None
+
+
+def test_standard_mode_stores_no_label_check(test_setup):
+    client, engine, fake_pipeline = test_setup
+    fake_pipeline.review_reason = "would be flagged in super mode"
+
+    data = client.post("/api/v1/search", json={"topic": "BMW"}).json()
+
+    assert (data["label_check"], data["needs_review"], data["review_reason"]) == (None, None, None)
+    with Session(engine) as session:
+        record = session.get(SearchRecord, data["id"])
+        assert (record.verification_mode, record.label_check, record.needs_review) == ("standard", None, None)

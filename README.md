@@ -110,6 +110,48 @@ on the same origin, so CORS is not needed.
 6. The response returns the report. React renders it and offers a `.md` download.
    On failure, the record is marked `ERROR` (stores the exception type only) and the client gets 503 or 500 with the record ID.
 
+**Verification modes and label check** (spec SRCH-14, SRCH-15)
+
+<!-- ![Verification modes: the scraped article, lead image and image labels feed three lanes. Standard mode, the default: one Gemini call sees image and article and returns description, reason and PASS/FAIL. Super mode (API value thorough): call 1 sees only the image and writes a blind description; call 2 sees image, article and that description and returns the verdict. Label check, plain code in Super mode only: do the caption, alt text or file name contain a title word. The result keeps Gemini's verdict; in Super mode it flags Needs review when the two disagree. Standard keeps the original report.](docs/images/verification.png)
+
+<sub>Source: [docs/images/verification.py](docs/images/verification.py). Regenerate with `python docs/images/verification.py`.</sub> -->
+
+Pipeline per mode:
+
+![Standard mode: the image and the scraped details (title, first paragraph, infobox fields) go into one Gemini call, which describes the image and decides whether it shows the subject. Outputs: description, reason, PASS/FAIL.](docs/images/mode-standard.png)
+
+![Super mode: Gemini call 1 sees only the image and writes the blind description. Gemini call 2 sees the image, the scraped details and the blind description, and returns the reason and PASS/FAIL. Separately, plain code checks whether the image labels (caption, alt text, file name) contain a title word; if that disagrees with the verdict, the result is marked Needs review. The labels never reach Gemini.](docs/images/mode-super.png)
+
+<sub>Source: [docs/images/modes.py](docs/images/modes.py). Regenerate with `python docs/images/modes.py`.</sub>
+
+| | Standard (default) | Super mode (API: `thorough`) |
+|---|---|---|
+| Gemini calls | 1 | 2 (about twice the time and cost) |
+| Image description | Written in the same call as the verdict, with the article in view | Written from the **image alone**, before Gemini sees the article |
+| Verdict | Image + article | Image + article + the blind description |
+| Label check and "Needs review" | ❌ | ✅ |
+| Report | The original five sections, unchanged | Adds the mode, the description's source, a labels section and any review flag |
+
+- **Choosing a mode:** the **Super mode** switch on the Verify page (off = Standard), with an ⓘ panel explaining both modes. The API takes `"mode": "standard" | "thorough"` in `POST /search` (unknown mode → 422, nothing saved).
+- **Standard mode is unchanged:** same single call, same report and behaviour as before these features. Every new feature is in Super mode.
+- **Label check** (Super mode only; plain code, no AI): do the chosen image's caption, alt text or file name contain a significant word of the article title? Result: `agrees`, `unclear` or `no_labels`. "Unclear" is not a contradiction: BMW's caption, "Corporate logotype since 2021", never names BMW.
+- **The verdict always comes from Gemini.** The labels never change PASS/FAIL. **Needs review** is flagged only when the two disagree: FAIL while the labels name the subject, or PASS while they don't.
+- **Why:** in Standard mode Gemini describes and judges in one call, so it partly checks itself. Super mode adds two kinds of evidence the verdict call can't influence: the blind description and the label check.
+- **Stored per search:** `verification_mode` always; `label_check` and `needs_review` in Super mode (empty in Standard).
+- **Measured live** (2026-11-24, `gemini-3.5-flash-lite:low`, same 52 labelled cases and images for both modes, one run each; PASS = positive):
+
+  | | Standard | Super mode |
+  |---|---|---|
+  | Accuracy | 92.3% (48/52) | 94.2% (49/52) |
+  | Recall (genuine images passed) | 100% | 100% |
+  | Specificity (wrong images failed) | 84.6% | 88.5% |
+  | Precision / F1 / MCC | 86.7% / 0.929 / 0.856 | 89.7% / 0.945 / 0.891 |
+  | Median time per search | 1.7 s | 3.0 s |
+
+  - The modes differ by **one case** (Bald eagle + golden eagle photo: Standard passed it, Super failed it); the 95% intervals overlap almost fully, so Super is *at least as accurate*, not proven better. Both missed Viola↔Violin (size can't be seen in a photo) and American alligator + crocodile photo. Every error was a wrong image accepted; no genuine image was rejected.
+  - **Needs review** flagged all 3 of Super's errors, but this is a best case: in the test, swapped images keep their own page's labels, which can't happen in the app. It also raised **7 false alarms**: generic shared words (Tower, Bridge, Eagle, Curie) count as a match, and 3 of 26 genuine images (Colosseum, Apollo 11, Nile crocodile) have labels without the title word.
+  - Re-run: `python -m scripts.model_compare --models gemini-3.5-flash-lite:low --mode thorough --cache output/model_eval/cache-current`; metrics: `python -m scripts.eval_metrics <results.json>`.
+
 **API endpoints** (all under `/api/v1`; full schemas at `/docs`)
 
 | Method | Path | Access | Purpose |
@@ -333,7 +375,7 @@ It has **not been tested yet**.
 ## 7. Testing & Verification
 
 **Automated results (run 2026-11-24, Linux, Python 3.12.16, pytest 9.2.0):
-243 passed, 0 failed, 64.9 s.**
+249 passed, 0 failed, 68.0 s.**
 
 | Area | Test files |
 |---|---|
@@ -390,6 +432,9 @@ Wikipedia and Gemini calls), concurrent users, and the network.
 
 **Live Gemini evidence.** `scripts/model_compare.py` (2026-11-22) called the
 real Wikipedia and Gemini for 40 labelled cases. The final run scored 40/40.
+On 2026-11-24, with 12 look-alike cases added (52 in total) and the current
+lead-image scraper, Standard scored 48/52 and Super mode 49/52; see
+[Verification modes](#3-system-architecture) for the metrics.
 This shows the verifier works against the live API, but it is not an
 end-to-end test of the web app.
 

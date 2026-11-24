@@ -37,6 +37,12 @@ class SearchRecord(SQLModel, table=True):
         index=True,
     )
 
+    # Verification mode and the label check (spec SRCH-14, SRCH-15).
+    # NULL on records saved before these existed.
+    verification_mode: str | None = None   # "standard" or "thorough"
+    label_check: str | None = None         # "agrees", "unclear" or "no_labels"
+    needs_review: bool | None = None       # the visual verdict and the labels disagree
+
 class User(SQLModel, table=True):
     """Account with an admin or user role; stores no plaintext passwords."""
 

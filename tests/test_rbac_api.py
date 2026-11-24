@@ -18,7 +18,7 @@ from security.passwords import hash_password
 
 
 class FakePipeline:
-    def generate_with_details(self, topic: str, work_dir: Path):
+    def generate_with_details(self, topic: str, work_dir: Path, mode: str = "standard"):
         report_path = work_dir / "report.md"
         report_path.write_text(f"# {topic}\n\n**Match Status: PASS**", encoding="utf-8")
         return SimpleNamespace(
@@ -31,6 +31,8 @@ class FakePipeline:
                 "fields": {"known for": "A test"},
             },
             verification={"description": "Example image", "matches": True, "reason": "Matched"},
+            labels={"status": "agrees", "matched_in": ["File name"]},
+            review_reason=None,
         )
 
 

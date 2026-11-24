@@ -133,7 +133,8 @@ export const api = {
   confirmPasswordReset: (token, newPassword) => call('/auth/password-reset/confirm', {
     method: 'POST', body: { token, new_password: newPassword },
   }),
-  search: (token, topic) => call('/search', { method: 'POST', token, body: { topic } }),
+  /** mode: 'standard' (1 Gemini call) or 'thorough' (adds a blind image description). */
+  search: (token, topic, mode = 'standard') => call('/search', { method: 'POST', token, body: { topic, mode } }),
   /**
    * One page of history, newest first. Asks for one extra row to learn whether
    * an older page exists, without a separate count request.

@@ -237,9 +237,9 @@ export default function App() {
   useEffect(() => { if (ready) loadHistoryStats(); }, [ready, loadHistoryStats]);
   useEffect(() => { if (ready && session.user.role === 'admin' && section === 'admin') loadUsers(); }, [ready, session, section, loadUsers]);
 
-  const search = async topic => {
+  const search = async (topic, mode = 'standard') => {
     setSearchBusy(true); setSearchError(''); setResult(null);
-    try { const data = await service.search(session.token, topic); setResult(data); await refreshHistory(); }
+    try { const data = await service.search(session.token, topic, mode); setResult(data); await refreshHistory(); }
     catch (err) { setSearchError(errorMessage(err)); await refreshHistory(); }
     finally { setSearchBusy(false); }
   };

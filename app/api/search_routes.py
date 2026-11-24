@@ -46,6 +46,7 @@ def search_wikipedia(
             result = pipeline.generate_with_details(
                 topic=request.topic,
                 work_dir=Path(temp_dir),
+                mode=request.mode,
             )
 
             markdown = result.report_path.read_text(
@@ -61,6 +62,10 @@ def search_wikipedia(
                 fields=result.article["fields"],
                 matches=result.verification["matches"],
                 report_markdown=markdown,
+                # Super mode only; NULL in standard mode (spec SRCH-14)
+                label_check=result.labels["status"] if result.labels else None,
+                needs_review=(result.review_reason is not None) if result.labels else None,
+                verification_mode=request.mode,
             )
 
             # Step 4: Return API response
@@ -73,6 +78,10 @@ def search_wikipedia(
                 report_markdown=record.report_markdown,
                 image_url=record.image_url,
                 fields=result.article["fields"],
+                verification_mode=record.verification_mode,
+                label_check=record.label_check,
+                needs_review=record.needs_review,
+                review_reason=result.review_reason,
             )
 
     except Exception as exc:
