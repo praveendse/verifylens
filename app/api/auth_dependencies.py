@@ -1,14 +1,13 @@
 """Reusable backend authorization dependencies."""
 from typing import Annotated
 
-import jwt
 from fastapi import Depends, HTTPException, status
 from fastapi.security import OAuth2PasswordBearer
 from sqlmodel import Session
 
 from app.infra.db.database import get_session
 from app.infra.db.models import User
-from security.tokens import decode_access_claims
+from app.services import auth_service
 
 bearer_scheme = OAuth2PasswordBearer(tokenUrl="/api/v1/auth/login")
 
@@ -32,17 +31,9 @@ def get_authenticated_user(
     Only for /auth/me and /auth/password. Everything else uses get_current_user.
     """
     try:
-        claims = decode_access_claims(token)
-    except (jwt.InvalidTokenError, ValueError, TypeError):
+        return auth_service.authenticate_access_token(session, token)
+    except auth_service.InvalidAccessTokenError:
         raise _unauthorized() from None
-
-    user = session.get(User, claims.user_id)
-    if user is None or not user.is_active:
-        raise _unauthorized()
-    # Password changed/reset since this token was issued: token is revoked.
-    if claims.token_version != user.token_version:
-        raise _unauthorized()
-    return user
 
 
 def get_current_user(

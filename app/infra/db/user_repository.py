@@ -88,4 +88,5 @@ class UserRepository:
     def delete(self, user: User) -> None:
         self.session.delete(user)
 
-    
+    def get_by_username(self, username: str) -> User | None:
+        return self.session.exec(select(User).where(User.username == username)).first()

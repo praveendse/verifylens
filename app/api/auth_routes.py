@@ -5,19 +5,17 @@ from typing import Annotated
 from fastapi import APIRouter, Cookie, Depends, Header, HTTPException, Response, status
 from fastapi.responses import JSONResponse
 from fastapi.security import OAuth2PasswordRequestForm
-from sqlmodel import Session, select
+from sqlmodel import Session
 
 from app.api.auth_dependencies import get_authenticated_user
 from app.api.rate_limit import limit_login, limit_password_change, limit_refresh
 from app.infra.db.database import get_session
 from app.infra.db.models import User
 from app.dto.auth_models import AccessToken, PasswordChange, UserPublic
+from app.services import auth_service
 from app.services import refresh_token_service as refresh_svc
-from app.services.password_reset_service import cancel_unused_tokens, utcnow
+from app.services.password_reset_service import utcnow
 from app.config import Settings
-from security.password_policy import password_problem
-from security.passwords import hash_password, verify_password
-from security.tokens import create_access_token
 
 router = APIRouter(prefix="/auth", tags=["Authentication"])
 
@@ -47,11 +45,10 @@ def clear_refresh_cookie(response: Response) -> None:
     )
 
 
-def start_session(response: Response, session: Session, user: User) -> AccessToken:
-    """New refresh cookie plus an access token for a freshly authenticated user."""
-    raw, expires_at = refresh_svc.issue(session, user, Settings())
-    set_refresh_cookie(response, raw, expires_at)
-    return AccessToken(access_token=create_access_token(user.id, user.token_version))
+def session_response(response: Response, tokens: auth_service.SessionTokens) -> AccessToken:
+    """Set the refresh cookie and return the access token."""
+    set_refresh_cookie(response, tokens.refresh_token, tokens.expires_at)
+    return AccessToken(access_token=tokens.access_token)
 
 
 def require_csrf_header(x_requested_with: Annotated[str | None, Header()] = None) -> None:
@@ -59,27 +56,21 @@ def require_csrf_header(x_requested_with: Annotated[str | None, Header()] = None
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Missing X-Requested-With header")
 
 
-@router.post(
-    "/login",
-    response_model=AccessToken,
-    dependencies=[Depends(limit_login)],
-)
+@router.post("/login", response_model=AccessToken, dependencies=[Depends(limit_login)])
 def login(
     form: Annotated[OAuth2PasswordRequestForm, Depends()],
     session: Annotated[Session, Depends(get_session)],
     response: Response,
 ):
-    # Usernames are stored trimmed and lowercase (UserCreate, CLI scripts), so
-    # match them the same way here. Same key the login rate limiter uses.
-    username = form.username.strip().lower()
-    user = session.exec(select(User).where(User.username == username)).first()
-    if user is None or not user.is_active or not verify_password(form.password, user.hashed_password):
+    try:
+        user = auth_service.authenticate_user(session, form.username, form.password)
+    except auth_service.InvalidCredentialsError as exc:
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="Invalid username or password",
+            detail=str(exc),
             headers={"WWW-Authenticate": "Bearer"},
-        )
-    return start_session(response, session, user)
+        ) from exc
+    return session_response(response, auth_service.create_session(session, user, Settings()))
 
 
 @router.post(
@@ -93,7 +84,7 @@ def refresh(
     refresh_cookie: Annotated[str | None, Cookie(alias=REFRESH_COOKIE)] = None,
 ):
     """New access token from the refresh cookie. Rotates the cookie (AUTH-13)."""
-    result = refresh_svc.rotate(session, refresh_cookie, Settings()) if refresh_cookie else None
+    result = auth_service.refresh_session(session, refresh_cookie, Settings())
     if result is None:
         # Returned, not raised: an HTTPException would drop the cookie deletion.
         denied = JSONResponse(
@@ -103,9 +94,9 @@ def refresh(
         )
         clear_refresh_cookie(denied)
         return denied
-    if result.raw is not None:
-        set_refresh_cookie(response, result.raw, result.expires_at)
-    return AccessToken(access_token=create_access_token(result.user.id, result.user.token_version))
+    if result.refresh_token is not None and result.expires_at is not None:
+        set_refresh_cookie(response, result.refresh_token, result.expires_at)
+    return AccessToken(access_token=result.access_token)
 
 
 @router.post(
@@ -148,20 +139,10 @@ def change_password(
     Returns a fresh token and refresh cookie: every other session of this
     user is logged out.
     """
-    if not verify_password(payload.current_password, current_user.hashed_password):
-        raise HTTPException(status_code=400, detail="Current password is incorrect")
-    if payload.new_password == payload.current_password:
-        raise HTTPException(status_code=422, detail="New password must be different from the current one.")
-    problem = password_problem(current_user.username, payload.new_password)
-    if problem:
-        raise HTTPException(status_code=422, detail=problem)
-
-    current_user.hashed_password = hash_password(payload.new_password)
-    current_user.must_change_password = False
-    current_user.token_version += 1
-    cancel_unused_tokens(session, current_user.id)  # PWR-10: old reset links stop working
-    refresh_svc.revoke_user(session, current_user.id)  # AUTH-16
-    session.add(current_user)
-    session.commit()
-    session.refresh(current_user)
-    return start_session(response, session, current_user)
+    try:
+        tokens = auth_service.change_password(session, current_user, payload, Settings())
+    except auth_service.IncorrectPasswordError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    except auth_service.PasswordValidationError as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
+    return session_response(response, tokens)
