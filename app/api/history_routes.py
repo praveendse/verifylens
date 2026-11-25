@@ -30,6 +30,8 @@ def delete_search_history_record(
     current_user: Annotated[User, Depends(get_current_user)],
     session: Annotated[Session, Depends(get_session)],
 ):
+    """Owner or admin may delete. The report lives in this row (the pipeline's
+    working files are temporary), so nothing else needs cleaning up."""
     try:
         history_service.delete_record(session, current_user, record_id)
     except history_service.RecordNotFoundError as exc:

@@ -41,40 +41,10 @@ app = FastAPI(
     lifespan=lifespan,
 )
 
-app.include_router(
-    router,
-    prefix="/api/v1",
-)
-
-app.include_router(
-    search_router, 
-    prefix="/api/v1"
-)
-
-app.include_router(
-    history_router, 
-    prefix="/api/v1"
-)
-
-app.include_router(
-    auth_router, 
-    prefix="/api/v1"
-)
-
-app.include_router(
-    user_router,
-    prefix="/api/v1",
-)
-
-app.include_router(
-    admin_router,
-    prefix="/api/v1",
-)
-
-app.include_router(
-    password_reset_router,
-    prefix="/api/v1",
-)
+for api_router in (
+    router, search_router, history_router, auth_router, user_router, admin_router, password_reset_router,
+):
+    app.include_router(api_router, prefix="/api/v1")
 
 # Keep last: its catch-all route must not shadow the API routes above.
 mount_frontend(app, settings.frontend_dist)

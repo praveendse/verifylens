@@ -25,6 +25,12 @@ def list_users(
     session: Annotated[Session, Depends(get_session)],
     params: Annotated[UserListQuery, Query()],
 ):
+    """One page of accounts, oldest first.
+
+    Keyset pagination: after_id is the id of the last account the client
+    already has, so accounts created or deleted between page loads never cause
+    duplicated or skipped rows (unlike OFFSET).
+    """
     repository = UserRepository(session)
 
     return repository.list_users(
@@ -39,6 +45,7 @@ def count_users(
     session: Annotated[Session, Depends(get_session)],
     q: Annotated[str | None, Query(max_length=100)] = None,
 ):
+    """Number of accounts (optionally matching q), for "Showing N of total"."""
     repository = UserRepository(session)
 
     return CountResponse(
@@ -109,6 +116,11 @@ def reset_password(
     admin: Annotated[User, Depends(require_admin)],
     session: Annotated[Session, Depends(get_session)],
 ):
+    """Admin sets a temporary password for a user who forgot theirs.
+
+    The user's existing sessions are logged out, and they must choose a new
+    password at next login before they can use anything else.
+    """
     try:
         return user_service.reset_password(
             session=session,
@@ -142,6 +154,13 @@ def delete_user(
     admin: Annotated[User, Depends(require_admin)],
     session: Annotated[Session, Depends(get_session)],
 ):
+    """Permanently remove an account.
+
+    The user's searches are kept but unlinked (user_id = NULL), so the audit
+    history survives and only admins can still see those records. Existing
+    tokens for the account stop working at once, because every request
+    re-loads the user.
+    """
     try:
         user_service.delete_user(
             session=session,

@@ -12,7 +12,7 @@ from sqlalchemy import Engine, delete, or_, update
 from sqlmodel import Session, select
 
 from app.infra.db.models import RefreshToken, User
-from app.services.password_reset_service import _as_utc, hash_token, utcnow
+from app.services.token_utils import as_utc, hash_token, utcnow
 from app.config import Settings
 
 logger = logging.getLogger(__name__)
@@ -83,7 +83,7 @@ def rotate(session: Session, raw: str, settings: Settings) -> Refreshed | None:
         return None
 
     if row.replaced_at is not None:
-        if now - _as_utc(row.replaced_at) <= ROTATION_GRACE:
+        if now - as_utc(row.replaced_at) <= ROTATION_GRACE:
             user = _usable_user(session, row)
             return Refreshed(user, None, None) if user else None
         # An old token came back: someone kept a copy. Sign the user out everywhere.
@@ -92,7 +92,7 @@ def rotate(session: Session, raw: str, settings: Settings) -> Refreshed | None:
         session.commit()
         return None
 
-    if _as_utc(row.expires_at) <= now or _as_utc(row.family_expires_at) <= now:
+    if as_utc(row.expires_at) <= now or as_utc(row.family_expires_at) <= now:
         return None
     user = _usable_user(session, row)
     if user is None:
@@ -110,7 +110,7 @@ def rotate(session: Session, raw: str, settings: Settings) -> Refreshed | None:
         return Refreshed(user, None, None)  # lost the race: treat as within grace
 
     new_raw, new_row = _new_row(
-        session, user, row.family_id, _as_utc(row.family_expires_at),
+        session, user, row.family_id, as_utc(row.family_expires_at),
         now, timedelta(hours=settings.refresh_token_idle_hours),
     )
     session.commit()

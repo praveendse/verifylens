@@ -14,7 +14,7 @@ from app.infra.db.models import User
 from app.dto.auth_models import AccessToken, PasswordChange, UserPublic
 from app.services import auth_service
 from app.services import refresh_token_service as refresh_svc
-from app.services.password_reset_service import utcnow
+from app.services.token_utils import utcnow
 from app.config import Settings
 
 router = APIRouter(prefix="/auth", tags=["Authentication"])

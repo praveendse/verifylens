@@ -69,8 +69,6 @@ def get_detail(session: Session, user: User, record_id: int) -> HistoryDetail:
 
 
 def delete_record(session: Session, user: User, record_id: int) -> None:
-    """Owner or admin may delete. The report lives in this row (the pipeline's
-    working files are temporary), so nothing else needs cleaning up."""
     repository = SearchRepository(session)
     repository.delete(_get_accessible(repository, user, record_id))
     session.commit()

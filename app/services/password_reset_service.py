@@ -4,10 +4,9 @@ validate, cancel, purge), the request and confirm workflows, and their emails.
 Only the SHA-256 of a token is stored. The raw token exists only in the
 email link and is never logged.
 """
-import hashlib
 import logging
 import secrets
-from datetime import datetime, timedelta, timezone
+from datetime import datetime, timedelta
 from typing import Callable
 
 from sqlalchemy import Engine, delete, or_, update
@@ -18,25 +17,13 @@ from app.infra.db.user_repository import UserRepository
 from app.dto.auth_models import MailContent
 from app.config import Settings
 from app.services.mail_service import MailSender
+from app.services.token_utils import as_utc, hash_token, utcnow
 from security.password_policy import password_problem
 from security.passwords import hash_password
 
 logger = logging.getLogger(__name__)
 
 PURGE_AFTER_DAYS = 7
-
-
-def utcnow() -> datetime:
-    return datetime.now(timezone.utc)
-
-
-def _as_utc(value: datetime) -> datetime:
-    """SQLite returns naive datetimes; they are stored as UTC."""
-    return value if value.tzinfo else value.replace(tzinfo=timezone.utc)
-
-
-def hash_token(raw: str) -> str:
-    return hashlib.sha256(raw.encode("utf-8")).hexdigest()
 
 
 def config_problem(settings: Settings) -> str | None:
@@ -101,7 +88,7 @@ def find_valid_token(session: Session, raw: str, now: datetime) -> tuple[Passwor
     row = session.exec(
         select(PasswordResetToken).where(PasswordResetToken.token_hash == hash_token(raw))
     ).first()
-    if row is None or row.used_at is not None or _as_utc(row.expires_at) <= now:
+    if row is None or row.used_at is not None or as_utc(row.expires_at) <= now:
         return None
     user = session.get(User, row.user_id)
     if user is None or not user.is_active:
