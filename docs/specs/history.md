@@ -5,7 +5,7 @@ Status: Draft (from code at `846e4cd`; not yet reviewed)
 Users browse, filter, open and delete their own past searches and see their
 totals. Admins can do the same across every record.
 
-Code: `app/api/history_routes.py`, `app/db/repository.py`. The scope rules
+Code: `app/api/history_routes.py`, `app/services/history_service.py`, `app/infra/db/repository.py`. The scope rules
 are in [rbac.md](rbac.md).
 
 ## Endpoints

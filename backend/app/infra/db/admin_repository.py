@@ -1,8 +1,8 @@
 """Database queries for the admin overview dashboard.
 
 Everything is computed with aggregate queries (COUNT / GROUP BY) or small
-LIMITed selects, so the cost stays flat as the history grows; no record bodies
-(reports, infobox data) are loaded.
+LIMITed selects, so no record bodies (reports, infobox data) are loaded and
+the response stays small. Query time still grows with the number of records.
 """
 from datetime import datetime
 

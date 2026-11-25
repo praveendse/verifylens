@@ -38,7 +38,8 @@ the fallback.
 | POST | `/api/v1/auth/password-reset/confirm` | none | `{token, new_password}` | 200 (no token issued), 400 `Invalid or expired reset link`, or 422 password rule |
 
 Code: `app/api/password_reset_routes.py`,
-`app/services/password_reset_service.py`, `app/services/mail_service.py`.
+`app/services/password_reset_service.py` (tokens, request and confirm workflows),
+`app/services/mail_service.py`.
 Tests: `tests/test_password_recovery.py`.
 
 ## Requirements
@@ -61,7 +62,7 @@ Tests: `tests/test_password_recovery.py`.
 | PWR-14 | Settings: `SMTP_HOST`, `SMTP_PORT` (default 587), `SMTP_USERNAME`, `SMTP_PASSWORD` (a secret, via PLT-04 sources), `SMTP_FROM`, `SMTP_STARTTLS` (default true), `APP_BASE_URL`, `PASSWORD_RESET_TOKEN_MINUTES`, `PASSWORD_RESET_ENABLED` (default false). SMTP connections time out after 10 s. | Tested: `test_smtp_sender_uses_starttls_login_and_from` (fake SMTP). Listed in `.env.example`. |
 | PWR-15 | When `PASSWORD_RESET_ENABLED` is false or any of `SMTP_HOST`, `SMTP_FROM`, `APP_BASE_URL` is missing, `request` and `confirm` return 404 and `status` returns `{enabled: false}`. The app logs one startup warning naming the missing settings if the feature is enabled but incomplete. | Tested: `test_endpoints_are_404_unless_enabled_and_configured`, `test_status_reports_enabled_when_configured`, `test_config_problem_names_missing_settings` |
 | PWR-16 | Tokens used or expired more than 7 days ago are deleted at startup. | Tested: `test_purge_removes_only_old_used_or_expired_tokens` |
-| PWR-17 | Frontend: a **Forgot password?** link on sign-in (shown only when `status` says enabled); a request page; a reset page that reads the token from the fragment and then clears it from the address bar (kept in memory only, so a page refresh loses it and the user must reopen the email link); after a reset, back to sign in with a confirmation; an email field in the create form and in Edit account. | Tested (Vitest, `frontend-react/src/__tests__/`): `passwordRecovery.test.jsx`, `appRecoveryFlow.test.jsx`, `apiClient.test.js`, `adminEmail.test.jsx`. Checked in Chromium at desktop and 390 px width against a local backend (2026-11-23). |
+| PWR-17 | Frontend: a **Forgot password?** link on sign-in (shown only when `status` says enabled); a request page; a reset page that reads the token from the fragment and then clears it from the address bar (kept in memory only, so a page refresh loses it and the user must reopen the email link); after a reset, back to sign in with a confirmation; an email field in the create form and in Edit account. | Tested (Vitest, `frontend/src/__tests__/`): `passwordRecovery.test.jsx`, `appRecoveryFlow.test.jsx`, `apiClient.test.js`, `adminEmail.test.jsx`. Checked in Chromium at desktop and 390 px width against a local backend (2026-11-23). |
 | PWR-18 | Deleting a user also deletes their reset tokens. | Tested: `test_deleting_user_removes_their_reset_tokens` |
 
 ## Acceptance criteria
@@ -73,7 +74,7 @@ Tests: `tests/test_password_recovery.py`.
 - **PWR-11** Given 3 requests for Alice in 15 minutes (by username, email, or a mix), when a 4th arrives, then 202 and no 4th email is sent.
 
 ## Test plan
-- **API tests** (`tests/test_password_recovery.py`, 49 tests): a fake mail
+- **API tests** (`tests/test_password_recovery.py`, 52 tests): a fake mail
   sender records messages; no real SMTP. Each acceptance criterion is covered,
   plus a check that the token never appears in the logs (`caplog`).
 - **Timing (PWR-03):** not measured in tests. `TestClient` runs background tasks

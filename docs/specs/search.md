@@ -7,7 +7,7 @@ main image, asks Gemini whether the image shows the article's subject, and
 returns a Markdown report. Every attempt is saved to history, including failed
 ones.
 
-Code: `app/api/search_routes.py`, `app/services/pipeline_service.py`,
+Code: `app/api/search_routes.py`, `app/services/search_service.py`, `app/services/pipeline_service.py`,
 `wikipedia_service.py`, `gemini_service.py`, `label_check.py`, `report_service.py`.
 
 ## Endpoint

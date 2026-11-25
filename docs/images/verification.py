@@ -2,7 +2,7 @@
 
 Run from the project root:  python docs/images/verification.py
 Shows the verification modes and the label check (spec SRCH-14, SRCH-15),
-as implemented in app/services/pipeline_service.py. Arrows show data flow.
+as implemented in backend/app/services/pipeline_service.py. Arrows show data flow.
 Uses the Playwright Chromium the app already installs.
 """
 from pathlib import Path

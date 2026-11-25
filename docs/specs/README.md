@@ -6,6 +6,9 @@ yet been reviewed against Jira PHX-433 or approved by anyone. Until a spec is
 reviewed, treat it as a description of current behaviour, not a statement of
 intended behaviour.
 
+Code paths in these specs are relative to `backend/` unless they start with
+`frontend/` (repository layout since 2026-11-25).
+
 ## Why these exist
 
 The spec is the source of truth. Every change follows this order:

@@ -1,7 +1,7 @@
 """Generate docs/images/database.svg and database.png (ER diagram).
 
 Run from the project root:  python docs/images/database.py
-Matches app/db/models.py (plus the indexes in app/db/migrations.py).
+Matches backend/app/infra/db/models.py (plus the indexes in backend/app/infra/db/migrations.py).
 Crow's foot notation. Uses the Playwright Chromium the app already installs.
 """
 from pathlib import Path

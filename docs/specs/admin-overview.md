@@ -5,7 +5,7 @@ Status: Draft (from code at `846e4cd`; not yet reviewed)
 In one request, an admin sees: how many accounts exist, how searches are
 going, who is active or idle, and what is failing.
 
-Code: `app/api/admin_routes.py`. Endpoint: `GET /api/v1/admin/overview`
+Code: `app/api/admin_routes.py`, `app/services/admin_service.py`, `app/infra/db/admin_repository.py`. Endpoint: `GET /api/v1/admin/overview`
 (admin only).
 
 All "days" are **UTC calendar days**. "30 days" means today plus the 29 days

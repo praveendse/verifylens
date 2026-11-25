@@ -5,7 +5,8 @@ Status: Draft (from code at `846e4cd`; not yet reviewed)
 Admins create, find, edit, deactivate and delete accounts, and reset
 passwords. The system always has at least one active admin.
 
-Code: `app/api/user_routes.py`, `app/dto/user_models.py`,
+Code: `app/api/user_routes.py`, `app/services/user_service.py`,
+`app/infra/db/user_repository.py`, `app/dto/user_models.py`,
 `scripts/bootstrap_admin.py`, `scripts/reset_password.py`.
 All endpoints need an admin (see [rbac.md](rbac.md)).
 

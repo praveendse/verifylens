@@ -6,7 +6,7 @@ The app starts only when it is configured safely, keeps its data safe across
 upgrades, reports the status of the services it depends on, and serves the
 React build from the same origin as the API.
 
-Code: `app/main.py`, `security/secrets.py`, `app/db/`,
+Code: `app/main.py`, `app/config/`, `security/secrets.py`, `app/infra/db/`,
 `app/services/health_service.py`, `app/frontend.py`, `scripts/backup_db.py`.
 
 ## Requirements
@@ -21,10 +21,10 @@ Code: `app/main.py`, `security/secrets.py`, `app/db/`,
 | PLT-06 | SQLite runs in WAL mode with `busy_timeout = 5000 ms`. The database file is at `DATABASE_PATH`, which must be on a local disk. | Not tested directly |
 | PLT-07 | **Single process only.** SQLite allows one writer and the rate-limit counters live in memory. Deployment must run one worker. | Constraint, not testable. Documented in README and DEPLOY.md |
 | PLT-08 | `scripts.backup_db` makes a consistent online backup that includes writes still in the WAL. It keeps the newest N backups (N ≥ 1) and exits non-zero if the source is missing. | Tested: `test_backup_includes_uncheckpointed_wal_writes`, `test_keeps_only_newest_n`, `test_missing_source_fails_with_exit_code`, `test_rejects_keep_zero` |
-| PLT-09 | When `frontend-react/dist/index.html` exists, FastAPI serves it at `/`. `/assets` is served as static files. Unknown non-API paths fall back to `index.html` with `Cache-Control: no-cache`. Unknown `/api/...` paths stay JSON 404s. Files outside `dist` are never served. If there is no build, nothing is mounted. | Tested: `test_serves_index_and_assets`, `test_unknown_page_falls_back_to_index`, `test_api_routes_win_and_unknown_api_is_json_404`, `test_cannot_read_files_outside_dist`, `test_nothing_mounted_when_not_built` |
+| PLT-09 | When `frontend/dist/index.html` exists, FastAPI serves it at `/`. `/assets` is served as static files. Unknown non-API paths fall back to `index.html` with `Cache-Control: no-cache`. Unknown `/api/...` paths stay JSON 404s. Files outside `dist` are never served. If there is no build, nothing is mounted. | Tested: `test_serves_index_and_assets`, `test_unknown_page_falls_back_to_index`, `test_api_routes_win_and_unknown_api_is_json_404`, `test_cannot_read_files_outside_dist`, `test_nothing_mounted_when_not_built` |
 | PLT-10 | The old unauthenticated Task 02 route `GET /report` is gone and not listed in OpenAPI. | Tested: `test_legacy_report_route_is_removed`, `test_report_not_in_openapi_schema` |
 | PLT-11 | Tests never touch `data/`. Each test uses a temporary database and fake or stubbed external services. | Verified by `tests/conftest.py` |
-| PLT-12 | A clean install from `requirements-prod.txt`, a Docker image build and the container starting. | **Not verified** |
+| PLT-12 | A clean install from `backend/requirements-prod.txt`, a Docker image build and the container starting. | **Not verified** |
 
 ## Out of scope
 Running several servers, Postgres, metrics or tracing, automatic restore.
