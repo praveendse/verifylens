@@ -90,3 +90,6 @@ class UserRepository:
 
     def get_by_username(self, username: str) -> User | None:
         return self.session.exec(select(User).where(User.username == username)).first()
+
+    def get_by_username_or_email(self, key: str) -> User | None:
+        return self.session.exec(select(User).where(or_(User.username == key, User.email == key))).first()

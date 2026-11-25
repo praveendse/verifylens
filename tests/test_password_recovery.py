@@ -394,6 +394,20 @@ def test_confirm_enforces_password_rules_and_keeps_link_usable(api, bad):
     assert confirm(client, raw).status_code == 200
 
 
+def test_confirm_that_loses_the_claim_race_changes_nothing(api, monkeypatch):
+    """PWR-07: another confirm used the token first; this one must not apply."""
+    from app.services import password_reset_service
+
+    client, _, mailer, _ = api
+    raw = link_for(client, mailer)
+    monkeypatch.setattr(password_reset_service, "claim_token", lambda *args: False)
+    resp = confirm(client, raw)
+    assert resp.status_code == 400
+    assert resp.json()["detail"] == INVALID
+    assert login(client, "alice", NEW_PW).status_code == 401
+    assert login(client, "alice", ALICE_PW).status_code == 200
+
+
 # ---------- PWR-10 / PWR-18: other paths cancel links ----------
 
 def test_admin_reset_cancels_pending_link(api):
