@@ -1,6 +1,6 @@
 import json
 
-from sqlalchemy import func, or_
+from sqlalchemy import func, or_, update
 from sqlmodel import Session, select
 from app.infra.db.models import SearchRecord
 from app.dto.history_models import HistoryStats
@@ -160,3 +160,12 @@ class SearchRepository:
                 # PENDING, SUCCESS without a verdict, or any unknown status
                 counts.other += n
         return counts
+
+    def unlink_user(self, user_id: int) -> None:
+        """Preserve search history by removing its user association."""
+
+        self.session.execute(
+            update(SearchRecord)
+            .where(SearchRecord.user_id == user_id)
+            .values(user_id=None)
+        ) # Notice that we deliberately do not call self.session.commit().
