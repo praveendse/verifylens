@@ -12,9 +12,8 @@ WORKDIR /build
 COPY frontend/package.json frontend/package-lock.json ./
 RUN npm ci --no-audit --no-fund
 COPY frontend/ ./
-# Real backend, never the in-browser demo. Same origin, so a relative API path.
-ENV VITE_DEMO_MODE=false \
-    VITE_API_BASE_URL=/api/v1
+# Same origin as the API, so a relative path. The build also type-checks.
+ENV VITE_API_BASE_URL=/api/v1
 RUN npm run build
 
 # ---- 2. Runtime --------------------------------------------------------------

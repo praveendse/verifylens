@@ -34,7 +34,7 @@ backend/             Python backend (run backend commands from this folder)
   scripts/           bootstrap_admin, reset_password, backup_db, model_compare,
                      eval_metrics, perf_test, dev_mail_catcher (local fake mail server)
   tests/             Automated tests (temporary databases, no external calls)
-frontend/            React app (src/api/client.js is the only backend boundary)
+frontend/            React + TypeScript app (src/api/client.ts is the only backend boundary)
 data/                Live SQLite database (not in git)
 docs/                Specifications and diagrams
 .env                 Local settings and secrets (not in git), read by the backend
@@ -360,7 +360,6 @@ no restart is needed after changing these settings.
 | `REFRESH_ATTEMPTS_PER_IP_PER_MINUTE` | `30` | Rate limit for `/auth/refresh` |
 | `LOGIN_ATTEMPTS_PER_IP_PER_MINUTE` / `_PER_USERNAME_` / `SEARCHES_PER_USER_PER_MINUTE` | `10` / `5` / `5` | Rate limits |
 | `VITE_API_BASE_URL` (`frontend/.env`) | `/api/v1` | API base path for React |
-| `VITE_DEMO_MODE` (`frontend/.env`) | `false` | UI preview with fake data. **Never enable for real use.** |
 | `PASSWORD_RESET_ENABLED` | `false` | Turns on password reset by email (also needs the three settings below) |
 | `SMTP_HOST` / `SMTP_FROM` / `APP_BASE_URL` | None | Mail server, sender address, and the app's public address used in reset links |
 | `SMTP_PORT` / `SMTP_STARTTLS` | `587` / `true` | Mail server port; encrypt the connection |
@@ -375,7 +374,7 @@ no restart is needed after changing these settings.
 | Back up the database (safe while the app runs) | `python -m scripts.backup_db` (default folder: `<repo>/backups/`) |
 | Fake mail server for local password-reset testing | `python -m scripts.dev_mail_catcher` |
 | Run backend tests | `python -m pytest` (or `python -m pytest backend` from the repository root) |
-| Run frontend tests | `cd frontend && npm test` |
+| Run frontend tests | `cd frontend && npm test` (all checks: `npm run check`) |
 | Build the frontend | `cd frontend && npm run build` |
 
 Docker deployment to an internal server is described in [DEPLOY.md](DEPLOY.md).
@@ -408,7 +407,7 @@ Lowest: `dependencies.py` 71%, `database.py` 80%, `tokens.py` 86%,
 `health_service.py` 88%, `user_service.py` 90%. Not counted: `scripts/` (CLI
 and measurement tools; `bootstrap_admin` and `model_compare` have no tests).
 
-**Tools.** Backend: pytest with FastAPI `TestClient` (`backend/tests/`). Frontend: Vitest with React Testing Library (`frontend/src/__tests__/`).
+**Tools.** Backend: pytest with FastAPI `TestClient` (`backend/tests/`). Frontend: Vitest with React Testing Library and MSW (`frontend/src/**/*.test.ts(x)`); `npm run check` runs type check, lint, format check and tests, as does the CI workflow `.github/workflows/frontend.yml`.
 
 **Strategy.** Each test uses a temporary SQLite database. `tests/conftest.py`
 redirects the app away from `data/` before any import. Requests go through the
@@ -497,8 +496,6 @@ end-to-end test of the web app.
   manual script and a backup first.
 - `backend/requirements.txt` is mostly unpinned (only `google-genai` is pinned).
   Use `backend/requirements-prod.txt` for a reproducible install.
-- Demo-mode UI text is still included in the production bundle. It is inactive
-  when `VITE_DEMO_MODE=false`.
 
 ---
 
