@@ -13,11 +13,11 @@ services:
       # VPN in front. Change to "8000:8000" only on an isolated network.
       - "127.0.0.1:8000:8000"
     environment:
-      # Optional overrides (defaults in app/config/settings.py):
+      # Optional overrides (defaults in backend/app/config/settings.py):
       # GEMINI_MODEL: gemini-3.5-flash-lite
       # SEARCHES_PER_USER_PER_MINUTE: "5"
       FORWARDED_ALLOW_IPS: "${FORWARDED_ALLOW_IPS:-127.0.0.1}"
-    # Read by the app from /run/secrets/<name> (security/secrets.py).
+    # Read by the app from /run/secrets/<name> (backend/security/secrets.py).
     # The files live on the server, outside the repo and the image.
     secrets:
       - jwt_secret_key

@@ -6,7 +6,8 @@ from pydantic_settings import BaseSettings, SettingsConfigDict
 
 from security.secrets import secrets_dir
 
-PROJECT_ROOT = Path(__file__).resolve().parents[2]
+# Repository root: backend/app/config/settings.py -> parents[3].
+PROJECT_ROOT = Path(__file__).resolve().parents[3]
 # Fixed location, so settings don't depend on the folder the server starts in.
 ENV_FILE = PROJECT_ROOT / ".env"
 
@@ -33,7 +34,7 @@ class Settings(BaseSettings):
 
     # Built React app (npm run build). Served by FastAPI at "/" when the
     # folder exists, so site and API share one origin and need no CORS.
-    frontend_dist: Path = PROJECT_ROOT / "frontend-react" / "dist"
+    frontend_dist: Path = PROJECT_ROOT / "frontend" / "dist"
 
     # Rate limits (per server process, sliding one-minute window).
     login_attempts_per_ip_per_minute: int = Field(default=10, ge=1)

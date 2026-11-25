@@ -49,8 +49,9 @@ from app.services.gemini_service import describe_image, verify_image
 from app.services.label_check import check_labels, needs_review
 from app.services.wikipedia_service import download_infobox_image, scrape_article
 from app.config import Settings
+from app.config.settings import PROJECT_ROOT
 
-OUT = Path("output/model_eval")
+OUT = PROJECT_ROOT / "output" / "model_eval"
 CALL_TIMEOUT_MS = 90_000
 CACHE = OUT / "cache"
 

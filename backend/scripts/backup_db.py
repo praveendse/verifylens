@@ -67,7 +67,7 @@ def backup(src: Path, dest_dir: Path, keep: int) -> Path:
 def main(argv: list[str] | None = None) -> int:
     from app.config import Settings
 
-    root = Path(__file__).resolve().parents[1]
+    root = Path(__file__).resolve().parents[2]  # repository root
     parser = argparse.ArgumentParser(description=__doc__.splitlines()[0])
     parser.add_argument("--src", type=Path, default=Settings().database_path)
     # BACKUP_DIR is set to /backups in the Docker image (a mounted folder).

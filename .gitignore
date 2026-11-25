@@ -2,9 +2,9 @@
 .env
 .env.*
 !.env.example
-frontend-react/.env
-frontend-react/.env.*
-!frontend-react/.env.example
+frontend/.env
+frontend/.env.*
+!frontend/.env.example
 
 # Live data and backups (contain password hashes and search history)
 data/
@@ -15,7 +15,7 @@ backups/
 
 # Generated
 output/
-frontend-react/dist/
-frontend-react/node_modules/
+frontend/dist/
+frontend/node_modules/
 __pycache__/
 .pytest_cache/

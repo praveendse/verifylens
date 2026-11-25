@@ -9,7 +9,7 @@ from pathlib import Path
 from app.config import JWTSettings, Settings
 from app.config.settings import ENV_FILE, PROJECT_ROOT
 
-REPO_ROOT = Path(__file__).resolve().parents[1]
+REPO_ROOT = Path(__file__).resolve().parents[2]
 
 
 def test_project_root_is_the_repository_root():
@@ -24,7 +24,7 @@ def test_default_database_path():
 
 def test_default_frontend_dist():
     default = Settings.model_fields["frontend_dist"].default
-    assert default == REPO_ROOT / "frontend-react" / "dist"
+    assert default == REPO_ROOT / "frontend" / "dist"
     assert (default.parent / "package.json").is_file()
 
 
