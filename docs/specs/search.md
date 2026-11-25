@@ -7,7 +7,7 @@ main image, asks Gemini whether the image shows the article's subject, and
 returns a Markdown report. Every attempt is saved to history, including failed
 ones.
 
-Code: `app/api/search_routes.py`, `app/services/pipeline_service.py`,
+Code: `app/api/search_routes.py`, `app/services/search_service.py`, `app/services/pipeline_service.py`,
 `wikipedia_service.py`, `gemini_service.py`, `label_check.py`, `report_service.py`.
 
 ## Endpoint
@@ -82,6 +82,6 @@ jobs, storing the image itself.
    marked `ERROR` at startup?
 4. Is sending article text and images to Google Gemini approved under RAD's
    data policy?
-5. The model shutdown date and replacement in `app/settings.py` are not
+5. The model shutdown date and replacement in `app/config/settings.py` are not
    checked against Google's documentation. Who confirms them before
    2026-12-01?

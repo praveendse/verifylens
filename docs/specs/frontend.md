@@ -7,7 +7,7 @@ in detail. Confirm each item in the browser.**
 A browser UI for every backend feature. All security decisions stay on the
 server (RBAC-02 to RBAC-07). The UI only hides what a role can't use.
 
-Code: `frontend-react/src/`. `src/api/client.js` is the only module that calls
+Code: `frontend/src/`. `src/api/client.js` is the only module that calls
 the backend.
 
 ## Screens (from `src/components/`)
@@ -34,7 +34,7 @@ the backend.
 | FE-06 | 401 responses send the user back to sign-in. 403, 429 and 503 messages from the API are shown to the user. | Not verified |
 | FE-07 | `VITE_API_BASE_URL` defaults to `/api/v1`. `VITE_DEMO_MODE` must be `false` in production builds. | Not verified |
 | FE-08 | `npm run build` succeeds. | Verified 2026-11-23 (Vite 7.3.8) |
-| FE-09 | Automated frontend tests: Vitest + React Testing Library, run with `npm test` in `frontend-react/`. | Started 2026-11-23: password-recovery screens and admin email fields only (33 tests). The rest of the UI is still untested. |
+| FE-09 | Automated frontend tests: Vitest + React Testing Library, run with `npm test` in `frontend/`. | Started 2026-11-23: password-recovery screens and admin email fields only (33 tests). The rest of the UI is still untested. |
 
 ## Manual end-to-end checklist (closes FR-05 and FR-06)
 Record the date, the build/commit, who ran it, and pass or fail for each step.

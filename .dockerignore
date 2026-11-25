@@ -13,12 +13,13 @@ backups/
 **/*.db-shm
 
 # Built/installed inside the image instead
-frontend-react/dist/
-frontend-react/node_modules/
+frontend/dist/
+frontend/node_modules/
 
 # Not needed at runtime
 output/
-tests/
+backend/tests/
+backend/pytest.ini
 docs/
 .vscode/
 .git/

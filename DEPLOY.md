@@ -40,7 +40,7 @@ docker compose exec app python -m scripts.bootstrap_admin --username admin
 ### Moving the existing database instead
 
 ```bash
-python -m scripts.backup_db --dest ./migrate          # on the old machine
+cd backend && python -m scripts.backup_db --dest ../migrate   # on the old machine
 docker compose cp ./migrate/search_history-*.db app:/data/search_history.db
 docker compose restart app
 ```

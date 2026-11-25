@@ -6,7 +6,8 @@ Only known, active users can use the API. Passwords are never stored in plain
 text. A password change or reset ends all of that user's other sessions.
 
 Code: `app/api/auth_routes.py`, `app/api/auth_dependencies.py`,
-`app/api/rate_limit.py`, `security/`.
+`app/api/rate_limit.py`, `app/services/auth_service.py`,
+`app/services/refresh_token_service.py`, `app/config/jwt.py`, `security/`.
 
 ## Endpoints
 

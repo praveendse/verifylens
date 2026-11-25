@@ -19,17 +19,29 @@ Password reset spec: [docs/specs/password-recovery.md](docs/specs/password-recov
 The technology used in each layer is shown in the [architecture diagram](#3-system-architecture).
 
 ```text
-app/
-  api/         Routes: auth, password reset, users, search, history, admin overview, health; rate limits
-  db/          models.py, repository.py, migrations.py (additive startup upgrades)
-  dto/         Request/response models and validation
-  services/    wikipedia, gemini, report, pipeline (orchestration), health, mail, password_reset
-security/      Password hashing, password policy, JWT tokens, secret loading
-scripts/       bootstrap_admin, reset_password, backup_db, model_compare, perf_test,
-               dev_mail_catcher (local fake mail server)
-tests/         Automated tests (temporary databases, no external calls)
-frontend-react/  React app (src/api/client.js is the only backend boundary)
+backend/             Python backend (run backend commands from this folder)
+  app/
+    api/             HTTP layer: routes, auth dependencies, rate limits, cookies
+    services/        Workflows and business rules: auth, users, search, history,
+                     admin overview, password reset, refresh tokens, and the
+                     pipeline with wikipedia, gemini, label check and report
+    infra/db/        Database: engine, models, additive migrations, repositories
+    dto/             Request/response models and validation
+    config/          Settings (settings.py) and JWT settings (jwt.py)
+    frontend.py      Serves the built React app
+    main.py          App setup and router registration
+  security/          Password hashing, password policy, JWT tokens, secret loading
+  scripts/           bootstrap_admin, reset_password, backup_db, model_compare,
+                     eval_metrics, perf_test, dev_mail_catcher (local fake mail server)
+  tests/             Automated tests (temporary databases, no external calls)
+frontend/            React app (src/api/client.js is the only backend boundary)
+data/                Live SQLite database (not in git)
+docs/                Specifications and diagrams
+.env                 Local settings and secrets (not in git), read by the backend
+Dockerfile, docker-compose.yml, DEPLOY.md   Deployment
 ```
+
+Backend file paths in this README are relative to `backend/`.
 
 ---
 
@@ -46,7 +58,7 @@ frontend-react/  React app (src/api/client.js is the only backend boundary)
 | FR-03 | Admin can create and manage users | `/users`: create, list/search, edit name, role and active flag, reset password, delete (`app/api/user_routes.py`) | ![Done](docs/images/icons/check.svg) Implemented and tested |
 | FR-04 | Normal users access only authorized functionality | `require_admin` guards `/users/*` and `/admin/*`. Users see only their own history; another user's record returns 404. | ![Done](docs/images/icons/check.svg) Implemented and tested |
 | FR-05 | Search Wikipedia topics and receive image verification reports | `POST /search` runs scrape → download → Gemini → Markdown report (`app/services/pipeline_service.py`) | ![Partial](docs/images/icons/warning.svg) Implemented. Tested with fakes and offline stubs. **Real end-to-end run not yet recorded.** |
-| FR-06 | React frontend | `frontend-react/`: sign-in, verify, history, admin overview, user management | ![Partial](docs/images/icons/warning.svg) Implemented. Production build passes. **No recorded browser run against the live backend.** |
+| FR-06 | React frontend | `frontend/`: sign-in, verify, history, admin overview, user management | ![Partial](docs/images/icons/warning.svg) Implemented. Production build passes. **No recorded browser run against the live backend.** |
 | FR-07 | SQLite persistence and search history | `searchrecord` and `user` tables. History is paged and filterable (`app/api/history_routes.py`). | ![Done](docs/images/icons/check.svg) Implemented and tested |
 
 **Additional requirements**
@@ -83,11 +95,26 @@ frontend-react/  React app (src/api/client.js is the only backend boundary)
 
 ![System architecture: Browser (React 19, Vite 7) calls a reverse proxy over HTTPS, which forwards to one Uvicorn process (Python 3.12, Docker). API layer: static frontend, REST routes, security (PyJWT, Argon2), in-memory rate limiter. Service layer: search pipeline (scrape, verify, label check in Super mode, report), Playwright scraper, Gemini verifier (1 call, 2 in Super mode), label check, report, health check, refresh tokens, password reset, mail. Data layer: SQLModel/SQLAlchemy over SQLite, which CLI scripts also use. Services call Wikipedia and Gemini over HTTPS and an SMTP server over STARTTLS](docs/images/architecture.png)
 
-Arrows point from caller to callee; each reply returns on the same connection. Most routes query the database directly; search, sessions and password reset go through services.
+Arrows point from caller to callee; each reply returns on the same connection.
 
 In development, Vite serves React on `:5173` and forwards `/api` to FastAPI on
-`:8000`. In single-server mode, FastAPI serves the built app (`frontend-react/dist`)
+`:8000`. In single-server mode, FastAPI serves the built app (`frontend/dist`)
 on the same origin, so CORS is not needed.
+
+**Backend layers.** Requests flow API → service → repository → SQLite.
+
+| Layer | Folder | Responsibility | Never |
+|---|---|---|---|
+| API | `app/api/` | Routes and request parsing; auth dependencies (`get_authenticated_user` → `get_current_user` → `require_admin`); rate limits; cookies and the CSRF header; turning service errors into HTTP status codes | Builds SQL or runs workflows |
+| Service | `app/services/` | Workflows and business rules: login and sessions, password change and reset, user administration, the search lifecycle, history access rules, admin overview figures. Decides when to commit. | Imports FastAPI |
+| Repository / infrastructure | `app/infra/db/` | Engine and sessions, table models, additive migrations, queries (`SearchRepository`, `UserRepository`, `AdminRepository`) | Holds business rules |
+| Configuration | `app/config/` | `Settings` and `JWTSettings`, read from the environment, `<repo>/.env` and secret files | |
+| Security | `security/` | Argon2 hashing, password policy, JWT encoding and checking, startup secret check | |
+
+Deliberate exceptions, to keep things simple:
+- Listing and counting users are plain reads, so those two routes call `UserRepository` directly; a service would only pass the call through.
+- Refresh-token and reset-token queries stay inside `refresh_token_service.py` and `password_reset_service.py`. They are small, security-critical (atomic claims, reuse detection) and fully tested.
+- `SearchRepository.create`, `mark_success` and `mark_error` commit on their own: the `PENDING` record must be saved before the slow pipeline runs.
 
 **Search workflow (`POST /api/v1/search`)**
 
@@ -97,7 +124,7 @@ on the same origin, so CORS is not needed.
 4. Gemini receives the article text and the image. It returns `{description, reason, matches}`, which is validated against a schema.
 5. The Markdown report is generated. The record is updated to `SUCCESS` with the report, infobox fields (JSON) and verdict.
 6. The response returns the report. React renders it and offers a `.md` download.
-   On failure, the record is marked `ERROR` (stores the exception type only) and the client gets 503 or 500 with the record ID.
+   On failure, the record is marked `ERROR` with a short error code. The client gets 503 (temporary, such as Gemini busy), 422 (nothing to verify for this topic) or 500, with a plain-language message. The record ID stays in the logs and History.
 
 **Verification modes and label check** (spec SRCH-14, SRCH-15)
 
@@ -137,7 +164,7 @@ Pipeline per mode:
 
   - The modes differ by **one case** (Bald eagle + golden eagle photo: Standard passed it, Super failed it); the 95% intervals overlap almost fully, so Super is *at least as accurate*, not proven better. Both missed Viola↔Violin (size can't be seen in a photo) and American alligator + crocodile photo. Every error was a wrong image accepted; no genuine image was rejected.
   - **Needs review** flagged all 3 of Super's errors, but this is a best case: in the test, swapped images keep their own page's labels, which can't happen in the app. It also raised **7 false alarms**: generic shared words (Tower, Bridge, Eagle, Curie) count as a match, and 3 of 26 genuine images (Colosseum, Apollo 11, Nile crocodile) have labels without the title word.
-  - Re-run: `python -m scripts.model_compare --models gemini-3.5-flash-lite:low --mode thorough --cache output/model_eval/cache-current`; metrics: `python -m scripts.eval_metrics <results.json>`.
+  - Re-run from `backend/`: `python -m scripts.model_compare --models gemini-3.5-flash-lite:low --mode thorough --cache ../output/model_eval/cache-current`; metrics: `python -m scripts.eval_metrics <results.json>`. Results are written to `<repo>/output/model_eval/`.
 
 **API endpoints** (all under `/api/v1`; full schemas at `/docs`)
 
@@ -177,12 +204,14 @@ requirement. Where the original motivation was not recorded, the table says so.
 |---|---|---|
 | **React + FastAPI** | Required stack. FastAPI reuses the existing backend and provides OpenAPI docs at `/docs`. | Two toolchains (Python, Node) to install. |
 | **SQLite** | Required storage. A single file, no server to run. | One writer at a time, so the app must run as **one process** (see Limitations). |
-| **SQLModel** | One class is both the table and the Pydantic model. *Why it was chosen over plain SQLAlchemy was not recorded.* | No Alembic. `app/db/migrations.py` can only add tables and columns. |
-| **Repository pattern** | `SearchRepository` keeps search-record SQL out of the route handlers. *Original motivation not recorded.* | Applied to search records only. User and admin routes query SQLModel directly. |
+| **SQLModel** | One class is both the table and the Pydantic model. *Why it was chosen over plain SQLAlchemy was not recorded.* | No Alembic. `app/infra/db/migrations.py` can only add tables and columns. |
+| **Layered backend: API → service → repository** | Supervisor requirement (2026-11): separate business logic and database queries from the API routes, and keep database code in an infrastructure layer (`app/infra/db/`). Each layer can be read and tested on its own, and HTTP details stay at the edge. | More files to navigate. A few deliberate exceptions, listed under [Backend layers](#3-system-architecture). |
+| **Separate `backend/` and `frontend/` folders** | Supervisor requirement. Each toolchain has its own folder. Deployment files, `data/` and `.env` stay at the repository root. Imports stay `app.*` because the backend runs from `backend/`. | Backend commands run from `backend/` (tests can also run from the root: `python -m pytest backend`). |
+| **Configuration package, one `.env`** | Supervisor requirement. `app/config/` holds `Settings` and `JWTSettings`. Both read `<repo>/.env` by absolute path, so the result doesn't depend on the folder Uvicorn starts in. | Default paths are derived from the settings file's location; `tests/test_config_paths.py` fails if a folder move breaks them. |
 | **JWT (HS256) + Argon2** | Stateless tokens with a 30-min expiry. A `token_version` claim lets a password change revoke old tokens. Argon2 is the `pwdlib` default and a memory-hard hash. | Access token is kept in React memory only (not `localStorage`). A rotating refresh token in an HttpOnly cookie restores the sign-in after a page reload and renews expired access tokens. |
 | **RBAC + user-owned records** | Normal users must reach only what they are authorized for. Each search stores `user_id` taken from the token, never from the request. Non-owners get 404, so record IDs are not revealed. | Old records with no owner are visible only to admins. |
 | **Playwright** | Drives Wikipedia's own search box and reads the rendered page, so a search term resolves the way it does for a person. *Why Playwright rather than the Wikipedia API was not recorded.* | Needs a Chromium download. Slower than an API call. Breaks if Wikipedia changes its page structure. |
-| **Gemini `gemini-3.5-flash-lite`, thinking level `low`** | A code comment in `app/settings.py` says the previous model, `gemini-2.5-flash`, shuts down on 2026-12-01 and that this is its named replacement at the same price; the date and price have not been checked against Google's documentation. `scripts/model_compare.py` compared Flash-Lite at the `minimal`, `low` and `medium` thinking levels on 40 hand-labelled cases (2026-11-22). The final `low` run scored 40/40. | Only Flash-Lite variants were compared. The labels are the author's assumption, not human-reviewed. An earlier run had one near-miss error (Marie Curie article with Pierre Curie image judged a match). Override with `GEMINI_MODEL`. |
+| **Gemini `gemini-3.5-flash-lite`, thinking level `low`** | A code comment in `app/config/settings.py` says the previous model, `gemini-2.5-flash`, shuts down on 2026-12-01 and that this is its named replacement at the same price; the date and price have not been checked against Google's documentation. `scripts/model_compare.py` compared Flash-Lite at the `minimal`, `low` and `medium` thinking levels on 40 hand-labelled cases (2026-11-22). The final `low` run scored 40/40. | Only Flash-Lite variants were compared. The labels are the author's assumption, not human-reviewed. An earlier run had one near-miss error (Marie Curie article with Pierre Curie image judged a match). Override with `GEMINI_MODEL`. |
 | **Infobox data as JSON (`fields_json`)** | Infobox fields differ between articles (a person vs. a bridge), so they are stored as a key/value JSON text column. | Not queryable as columns. Fine, since it is only displayed. |
 | **Dependency injection + fakes in tests** | `PipelineService` takes its scraper, downloader, verifier and reporter as parameters. Routes get it via `Depends(get_pipeline_service)`, which tests override. | Fakes prove the API logic, not that the real Wikipedia and Gemini still behave the same. That needs a separate live check. |
 | **In-memory rate limits** | No extra infrastructure. It matches the single-process deployment. | Counters reset on restart and do not work across several processes. |
@@ -251,7 +280,8 @@ always remain.
 ## 6. Installation & Execution
 
 Prerequisites: Conda or Mamba (Miniforge), and internet access for Wikipedia
-and Gemini. Run all commands from the project root unless stated otherwise.
+and Gemini. Backend commands run from `backend/`, frontend commands from
+`frontend/`; the blocks below start from the repository root.
 
 ```bash
 # 1. Environment (Python 3.12 + Node.js for the frontend)
@@ -259,25 +289,25 @@ conda create -n task03 python=3.12 nodejs
 conda activate task03
 
 # 2. Dependencies
-pip install -r requirements.txt          # requirements-prod.txt = pinned runtime set used by the Dockerfile
+pip install -r backend/requirements.txt  # backend/requirements-prod.txt = pinned runtime set used by the Dockerfile
 playwright install chromium
 
-# 3. Configuration
+# 3. Configuration (repository root)
 cp .env.example .env && chmod 600 .env   # then set JWT_SECRET_KEY and GEMINI_API_KEY
 python -c "import secrets; print(secrets.token_urlsafe(48))"   # generates a JWT_SECRET_KEY
 
 # 4. First admin (creates the database if needed; prompts for the password)
-python -m scripts.bootstrap_admin --username admin
+cd backend && python -m scripts.bootstrap_admin --username admin
 
-# 5. Run (two terminals)
-uvicorn app.main:app --reload                       # API on http://127.0.0.1:8000
-cd frontend-react && npm install && npm run dev     # UI on http://127.0.0.1:5173
+# 5. Run (two terminals, each starting at the repository root)
+cd backend && uvicorn app.main:app --reload        # API on http://127.0.0.1:8000
+cd frontend && npm install && npm run dev          # UI on http://127.0.0.1:5173
 ```
 
-**Single-server mode:** run `cd frontend-react && npm run build`, then
-`uvicorn app.main:app`. This serves both the UI and the API on `:8000`.
-Run uvicorn from the project root, because `.env` is read from the current
-folder.
+**Single-server mode:** run `cd frontend && npm run build`, then
+`cd backend && uvicorn app.main:app`. This serves both the UI and the API on
+`:8000`. The backend always reads `.env` from the repository root
+(`ENV_FILE` in `app/config/settings.py`), whichever folder Uvicorn starts in.
 
 **API documentation:** http://127.0.0.1:8000/docs (Swagger UI) or `/openapi.json`.
 
@@ -301,7 +331,7 @@ link if an admin has set their email (Admin → Edit existing account).
 2. Start the fake mail server in its own terminal. It prints each email
    (with the reset link) instead of sending it:
    ```bash
-   python -m scripts.dev_mail_catcher        # listens on 127.0.0.1:1025
+   cd backend && python -m scripts.dev_mail_catcher   # listens on 127.0.0.1:1025
    ```
 3. Refresh the sign-in page, click **Forgot password?**, and open the link
    printed in the mail-server terminal.
@@ -323,29 +353,30 @@ no restart is needed after changing these settings.
 | `GEMINI_THINKING_LEVEL` | `low` | `minimal`, `low`, `medium` or `high` (Gemini 3+) |
 | `GEMINI_TIMEOUT_SECONDS` | `75` | Per-request timeout (10–300) |
 | `HEADLESS` | `true` | Run Chromium headless |
-| `DATABASE_PATH` | `data/search_history.db` | SQLite file |
+| `DATABASE_PATH` | `<repo>/data/search_history.db` | SQLite file |
 | `JWT_ACCESS_TOKEN_MINUTES` | `30` | Access token lifetime (renewed silently while signed in) |
 | `REFRESH_TOKEN_IDLE_HOURS` / `REFRESH_TOKEN_MAX_DAYS` | `8` / `7` | Sign-in ends after this long without activity / this long in total |
 | `REFRESH_COOKIE_SECURE` | `true` | Refresh cookie sent over HTTPS only. Browsers allow it on `http://localhost`. Never set `false` in production. |
 | `REFRESH_ATTEMPTS_PER_IP_PER_MINUTE` | `30` | Rate limit for `/auth/refresh` |
 | `LOGIN_ATTEMPTS_PER_IP_PER_MINUTE` / `_PER_USERNAME_` / `SEARCHES_PER_USER_PER_MINUTE` | `10` / `5` / `5` | Rate limits |
-| `VITE_API_BASE_URL` (`frontend-react/.env`) | `/api/v1` | API base path for React |
-| `VITE_DEMO_MODE` (`frontend-react/.env`) | `false` | UI preview with fake data. **Never enable for real use.** |
+| `VITE_API_BASE_URL` (`frontend/.env`) | `/api/v1` | API base path for React |
+| `VITE_DEMO_MODE` (`frontend/.env`) | `false` | UI preview with fake data. **Never enable for real use.** |
 | `PASSWORD_RESET_ENABLED` | `false` | Turns on password reset by email (also needs the three settings below) |
 | `SMTP_HOST` / `SMTP_FROM` / `APP_BASE_URL` | None | Mail server, sender address, and the app's public address used in reset links |
 | `SMTP_PORT` / `SMTP_STARTTLS` | `587` / `true` | Mail server port; encrypt the connection |
 | `SMTP_USERNAME` / `SMTP_PASSWORD` | None | Mail server login, if required (`SMTP_PASSWORD` is a secret) |
 | `PASSWORD_RESET_TOKEN_MINUTES` | `15` | How long a reset link works (5–60) |
 
-**Operations:**
+**Operations** (Python commands run from `backend/`):
 
 | Task | Command |
 |---|---|
 | Admin forgot password | `python -m scripts.reset_password --username admin` (password is prompted) |
-| Back up the database (safe while the app runs) | `python -m scripts.backup_db` |
+| Back up the database (safe while the app runs) | `python -m scripts.backup_db` (default folder: `<repo>/backups/`) |
 | Fake mail server for local password-reset testing | `python -m scripts.dev_mail_catcher` |
-| Run backend tests | `python -m pytest tests` |
-| Run frontend tests | `cd frontend-react && npm test` |
+| Run backend tests | `python -m pytest` (or `python -m pytest backend` from the repository root) |
+| Run frontend tests | `cd frontend && npm test` |
+| Build the frontend | `cd frontend && npm run build` |
 
 Docker deployment to an internal server is described in [DEPLOY.md](DEPLOY.md).
 It has **not been tested yet**.
@@ -354,8 +385,10 @@ It has **not been tested yet**.
 
 ## 7. Testing & Verification
 
-**Automated results (run 2026-11-24, Linux, Python 3.12.16, pytest 9.2.0):
-249 passed, 0 failed, 68.0 s.**
+**Automated results (run 2026-11-25 after the architecture refactor, Linux,
+Python 3.12.16, pytest 9.2.0): 299 passed, 0 failed, about 1.5 min.** Before the
+refactor the suite had 294 tests; it added 5 (default-path checks and a
+reset-token race).
 
 | Area | Test files |
 |---|---|
@@ -366,32 +399,33 @@ It has **not been tested yet**.
 | Gemini service (mocked client) | `test_gemini_service` |
 | Scraper (offline Chromium with stubbed pages) and report generator | `test_wikipedia_service`, `test_report_service` |
 | Admin overview, system status, backups, frontend serving | `test_admin_overview`, `test_system_status`, `test_backup_db`, `test_frontend_serving` |
+| Default paths (database, frontend build, `.env`) | `test_config_paths` |
 | Password reset by email (fake mail sender), fake mail server | `test_password_recovery`, `test_dev_mail_catcher` |
 
-**Code coverage** (`pytest --cov=app --cov=security`, 2026-11-24): **95%** of
-statements in `app/` and `security/` (1,410 of 1,479). Lowest:
-`pipeline_service.py` 64% (the real scrape → Gemini wiring, replaced by fakes
-in tests), `dependencies.py` 71%, `database.py` 80%, `health_service.py` 88%.
-Not counted: `scripts/` (CLI and measurement tools; `bootstrap_admin` and
-`model_compare` have no tests).
+**Code coverage** (`python -m pytest --cov=app --cov=security` in `backend/`,
+2026-11-25): **97%** of statements in `app/` and `security/` (1,866 of 1,921).
+Lowest: `dependencies.py` 71%, `database.py` 80%, `tokens.py` 86%,
+`health_service.py` 88%, `user_service.py` 90%. Not counted: `scripts/` (CLI
+and measurement tools; `bootstrap_admin` and `model_compare` have no tests).
 
-**Tools.** Backend: pytest with FastAPI `TestClient` (`tests/`). Frontend: Vitest with React Testing Library (`frontend-react/src/__tests__/`).
+**Tools.** Backend: pytest with FastAPI `TestClient` (`backend/tests/`). Frontend: Vitest with React Testing Library (`frontend/src/__tests__/`).
 
 **Strategy.** Each test uses a temporary SQLite database. `tests/conftest.py`
 redirects the app away from `data/` before any import. Requests go through the
 real login, so role and ownership rules are tested end to end inside the API.
 Wikipedia and Gemini are always replaced by fakes, mocks or offline stubs.
 
-**Frontend.** `npm run build` succeeded on 2026-11-24.
-`npm test` (Vitest, run 2026-11-24): 55 passed, covering the password-recovery
+**Frontend.** `npm run build` succeeded on 2026-11-25.
+`npm test` (Vitest, run 2026-11-25): 63 passed in 10 files, covering the password-recovery
 screens, admin email fields and overview, system status, the Find user clear
-behaviour, and session handling (silent refresh and retry, restore after
-reload, logout). The rest of the UI has no automated tests. Coverage
-(`vitest --coverage`, v8): **46% of statements** (52% of lines, 38% of
+behaviour, verification modes, and session handling (silent refresh and retry,
+restore after reload, logout). The rest of the UI has no automated tests.
+Coverage (`vitest --coverage`, v8, 2026-11-24, not re-measured): **46% of statements** (52% of lines, 38% of
 branches). `npm audit`: 0 vulnerabilities (2026-11-23).
 
-**Performance** (`python -m scripts.perf_test`, 2026-11-24, Intel i7-13620H
-laptop). In-process `TestClient`, SQLite, no network; 40 timed runs per case
+**Performance** (`python -m scripts.perf_test` in `backend/`, 2026-11-24,
+Intel i7-13620H laptop; measured before the refactor, which did not change
+these queries). In-process `TestClient`, SQLite, no network; 40 timed runs per case
 after 3 warm-ups. Median / p95 latency in ms:
 
 | Endpoint | 100 users / 1k searches | 1k / 10k | 10k / 100k |
@@ -425,8 +459,9 @@ end-to-end test of the web app.
 - Staying signed in in a real browser: page reload, a request after the
   30-min access token expires, two tabs open, and logout. Only checked with
   automated tests and `curl` against a local server (2026-11-24).
-- Installing from `requirements.txt` into a fresh environment.
-- Docker image build and container start.
+- Installing from `backend/requirements.txt` into a fresh environment.
+- Docker image build and container start (the Dockerfile was updated for the
+  `backend/` and `frontend/` folders but has never been built).
 - Python dependency vulnerability scan (`pip-audit` not run).
 - Password reset email delivery on the server with the production mail
   account (only Gmail from the dev machine has been tried).
@@ -460,8 +495,8 @@ end-to-end test of the web app.
   link again.
 - **Schema changes are additive only.** Renaming or dropping columns needs a
   manual script and a backup first.
-- `requirements.txt` is mostly unpinned (only `google-genai` is pinned).
-  Use `requirements-prod.txt` for a reproducible install.
+- `backend/requirements.txt` is mostly unpinned (only `google-genai` is pinned).
+  Use `backend/requirements-prod.txt` for a reproducible install.
 - Demo-mode UI text is still included in the production bundle. It is inactive
   when `VITE_DEMO_MODE=false`.
 
