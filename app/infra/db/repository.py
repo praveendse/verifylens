@@ -161,6 +161,13 @@ class SearchRepository:
                 counts.other += n
         return counts
 
+    def get_by_id(self, record_id: int) -> SearchRecord | None:
+        return self.session.get(SearchRecord, record_id)
+
+    def delete(self, record: SearchRecord) -> None:
+        """Caller commits."""
+        self.session.delete(record)
+
     def unlink_user(self, user_id: int) -> None:
         """Preserve search history by removing its user association."""
 
