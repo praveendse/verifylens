@@ -1,29 +1,10 @@
 """Create and verify short-lived JWT access tokens for VerifyLens."""
 from dataclasses import dataclass
 from datetime import datetime, timedelta, timezone
-from pathlib import Path
 
 import jwt
-from pydantic import Field
-from pydantic_settings import BaseSettings, SettingsConfigDict
 
-from security.secrets import secrets_dir
-
-ROOT = Path(__file__).resolve().parents[1]
-
-
-class JWTSettings(BaseSettings):
-    model_config = SettingsConfigDict(
-        env_file=ROOT / ".env",
-        env_file_encoding="utf-8",
-        extra="ignore",
-        secrets_dir=secrets_dir(),
-    )
-
-    jwt_secret_key: str = Field(min_length=32)
-    jwt_access_token_minutes: int = Field(default=30, gt=0, le=1440)
-    jwt_issuer: str = "verifylens"
-    jwt_audience: str = "verifylens-api"
+from app.config import JWTSettings
 
 
 @dataclass(frozen=True)

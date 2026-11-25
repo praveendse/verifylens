@@ -1,4 +1,3 @@
-
 from pathlib import Path
 from typing import Literal
 
@@ -8,6 +7,9 @@ from pydantic_settings import BaseSettings, SettingsConfigDict
 from security.secrets import secrets_dir
 
 PROJECT_ROOT = Path(__file__).resolve().parents[2]
+# Fixed location, so settings don't depend on the folder the server starts in.
+ENV_FILE = PROJECT_ROOT / ".env"
+
 
 class Settings(BaseSettings):
 
@@ -63,7 +65,7 @@ class Settings(BaseSettings):
     smtp_starttls: bool = True
 
     model_config = SettingsConfigDict(
-        env_file=".env",
+        env_file=ENV_FILE,
         env_file_encoding="utf-8",
         extra="ignore",
         secrets_dir=secrets_dir(),
