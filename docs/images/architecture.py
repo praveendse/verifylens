@@ -111,12 +111,8 @@ arrow([(CX, 826), (CX, 870)])
 pill(CX + 14, 848, "calls")
 
 # Data layer
-layer(60, 874, 940, 92, "DATA LAYER", "SQLModel", DATA)
-card(76, 906, 908, 44, "Sessions, models, repository, migrations", [], DATA, center=True)
-
-# Routes that query the database themselves (not through a service)
-arrow([(60, 460), (40, 460), (40, 928), (58, 928)])
-pill(28, 848, "routes also query directly")
+layer(60, 874, 940, 92, "DATA LAYER", "SQLModel, app/infra/db", DATA)
+card(76, 906, 908, 44, "Sessions, models, repositories, migrations", [], DATA, center=True)
 
 # SQLite (file on a persistent volume)
 arrow([(CX, 966), (CX, 1032)])

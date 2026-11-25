@@ -2,7 +2,7 @@
 
 Run from the project root:  python docs/images/modes.py
 One simple pipeline diagram per verification mode (spec SRCH-15), matching
-app/services/pipeline_service.py. Arrows show what each step receives.
+backend/app/services/pipeline_service.py. Arrows show what each step receives.
 Uses the Playwright Chromium the app already installs.
 """
 from pathlib import Path

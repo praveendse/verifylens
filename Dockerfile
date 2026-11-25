@@ -9,9 +9,9 @@
 # ---- 1. Build the React app ------------------------------------------------
 FROM node:22-bookworm-slim AS frontend
 WORKDIR /build
-COPY frontend-react/package.json frontend-react/package-lock.json ./
+COPY frontend/package.json frontend/package-lock.json ./
 RUN npm ci --no-audit --no-fund
-COPY frontend-react/ ./
+COPY frontend/ ./
 # Real backend, never the in-browser demo. Same origin, so a relative API path.
 ENV VITE_DEMO_MODE=false \
     VITE_API_BASE_URL=/api/v1
@@ -26,10 +26,11 @@ ENV PYTHONDONTWRITEBYTECODE=1 \
     PIP_DISABLE_PIP_VERSION_CHECK=1 \
     PLAYWRIGHT_BROWSERS_PATH=/ms-playwright
 
-WORKDIR /app
+# Same layout as the repository: /app/backend (code) and /app/frontend/dist.
+WORKDIR /app/backend
 
 # Dependencies first so code changes don't reinstall them.
-COPY requirements-prod.txt .
+COPY backend/requirements-prod.txt .
 # libatomic1: needed by Playwright's bundled Node driver before it can run
 # "playwright install" (not included in the slim image).
 RUN apt-get update \
@@ -43,10 +44,10 @@ RUN useradd --create-home --uid 10001 --shell /usr/sbin/nologin verifylens \
  && mkdir -p /data /backups \
  && chown verifylens:verifylens /data /backups
 
-COPY app/ app/
-COPY security/ security/
-COPY scripts/ scripts/
-COPY --from=frontend /build/dist frontend-react/dist
+COPY backend/app/ app/
+COPY backend/security/ security/
+COPY backend/scripts/ scripts/
+COPY --from=frontend /build/dist /app/frontend/dist
 
 # FORWARDED_ALLOW_IPS (read by uvicorn): trust X-Forwarded-For only from this
 # reverse-proxy address, so rate limits see real client IPs. See DEPLOY.md.

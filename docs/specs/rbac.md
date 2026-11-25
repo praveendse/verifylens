@@ -7,7 +7,7 @@ and the search feature. The server makes every access decision. The React
 client only hides screens for convenience.
 
 Code: `app/api/auth_dependencies.py` (`get_current_user`, `require_admin`),
-`app/api/history_routes.py` (`allowed`, `owner_scope`).
+`app/services/history_service.py` (`can_access`, `owner_scope`).
 
 ## Access matrix
 
