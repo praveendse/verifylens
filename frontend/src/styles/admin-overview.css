@@ -86,9 +86,10 @@
   gap: 8px;
   min-width: 0;
   padding: 20px 22px;
-  border-radius: var(--r-inner);
+  border-radius: var(--r-card);
   background: var(--card-bg);
   border: 1px solid var(--border);
+  box-shadow: var(--card-shadow);
   -webkit-backdrop-filter: var(--card-blur);
   backdrop-filter: var(--card-blur);
 }
@@ -132,10 +133,6 @@
 /* Needs attention ------------------------------------------------------------- */
 .ov-attention {
   padding: 18px 24px;
-  border-color: var(--warn-line);
-}
-.ov-attention.is-clear {
-  border-color: var(--border);
 }
 .ov-attention-head {
   display: flex;

@@ -12,7 +12,7 @@ import { homePath, paths } from './paths';
 /** Signed-in pages. Remembers where the user was going, for after login. */
 export function RequireAuth() {
   const { status, user } = useAuth();
-  const location = useLocation();
+  const location = useLocation(); // page URL (address),
   if (status === 'restoring') return <FullPageSpinner label="Restoring your session" />;
   if (!user) {
     const state: LoginLocationState = { from: location.pathname + location.search };

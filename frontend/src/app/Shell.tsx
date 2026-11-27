@@ -55,6 +55,7 @@ function readSavedCollapse(): boolean | null {
   }
 }
 
+/* changes the state and saves the new preference. */
 function useSidebarCollapse(): [boolean, () => void] {
   const [collapsed, setCollapsed] = useState(
     () => readSavedCollapse() ?? window.matchMedia?.(MEDIUM_QUERY).matches ?? false,

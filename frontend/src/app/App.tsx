@@ -16,12 +16,15 @@ const router = createBrowserRouter(routes);
 export function App() {
   const [queryClient] = useState(createQueryClient); // one client per app instance
   return (
-    <QueryClientProvider client={queryClient}>
-      <AuthProvider>
-        <RouterProvider router={router} />
+    // 1. server-data cache
+    // 2. "who is signed in"
+    // 3. URL to page
+    <QueryClientProvider client={queryClient}> 
+      <AuthProvider>                           
+        <RouterProvider router={router} />     
       </AuthProvider>
       {/* Dev only: stripped from production builds automatically. */}
-      <ReactQueryDevtools buttonPosition="bottom-left" />
+      <ReactQueryDevtools buttonPosition="bottom-right" />
     </QueryClientProvider>
   );
 }

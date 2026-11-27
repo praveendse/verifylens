@@ -254,7 +254,7 @@ export function OverviewBody({ data }: { data: AdminOverview }) {
       </Section>
 
       <Section id="ov-attention-title" title="Needs attention">
-        <div className={`admin-card ov-attention ${attention ? '' : 'is-clear'}`}>
+        <div className="admin-card ov-attention">
           <div className="ov-attention-head">
             {attention ? (
               <ul className="ov-attention-list">
