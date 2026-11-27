@@ -1,0 +1,30 @@
+{
+  // Type-checking only: Vite (esbuild/rolldown) does the actual compiling.
+  "compilerOptions": {
+    "target": "ES2022",
+    "lib": ["ES2023", "DOM", "DOM.Iterable"],
+    "module": "ESNext",
+    "moduleResolution": "bundler",
+    "jsx": "react-jsx",
+    "noEmit": true,
+    "isolatedModules": true,
+    "verbatimModuleSyntax": true,
+    "skipLibCheck": true,
+    "resolveJsonModule": true,
+
+    /* Safety: the reason to use TypeScript at all */
+    "strict": true,
+    "noUncheckedIndexedAccess": true,
+    "noUnusedLocals": true,
+    "noUnusedParameters": true,
+    "noFallthroughCasesInSwitch": true,
+    "exactOptionalPropertyTypes": false,
+
+    /* "@/features/auth" instead of "../../../features/auth" */
+    "baseUrl": ".",
+    "paths": { "@/*": ["src/*"] },
+
+    "types": ["vite/client", "vitest/globals", "@testing-library/jest-dom/vitest"]
+  },
+  "include": ["src", "vite.config.ts", "eslint.config.js"]
+}

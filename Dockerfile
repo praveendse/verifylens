@@ -12,9 +12,8 @@ WORKDIR /build
 COPY frontend/package.json frontend/package-lock.json ./
 RUN npm ci --no-audit --no-fund
 COPY frontend/ ./
-# Real backend, never the in-browser demo. Same origin, so a relative API path.
-ENV VITE_DEMO_MODE=false \
-    VITE_API_BASE_URL=/api/v1
+# Same origin as the API, so a relative path. The build also type-checks.
+ENV VITE_API_BASE_URL=/api/v1
 RUN npm run build
 
 # ---- 2. Runtime --------------------------------------------------------------
@@ -58,7 +57,7 @@ ENV DATABASE_PATH=/data/search_history.db \
 
 USER verifylens
 EXPOSE 8000
-# Persistent data: on Railway, mount a Railway Volume at /data (Docker VOLUME is not supported).
+# VOLUME ["/data"]
 
 HEALTHCHECK --interval=30s --timeout=5s --start-period=20s --retries=3 \
   CMD python -c "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/api/v1/health', timeout=4)"

@@ -1,0 +1,586 @@
+/* Admin overview page (AdminOverview.jsx, ActivityChart.jsx, OverviewVisuals.jsx). Uses the app's theme
+   tokens; chart fills use the shared --viz-* outcome colours. */
+
+/* Layout --------------------------------------------------------------------- */
+.ov {
+  display: grid;
+  gap: 20px;
+  align-content: start;
+  transition: opacity 0.15s ease;
+}
+.ov > .page-top-heading {
+  margin-bottom: 0;
+}
+.ov.is-refreshing > :not(.page-top-heading) {
+  opacity: 0.6;
+}
+.ov-updated {
+  margin: -8px 0 0;
+  font-size: 12.5px;
+  color: var(--subtle);
+}
+.ov-split {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(280px, 340px);
+  gap: 20px;
+  align-items: stretch;
+}
+.ov-split > .donut-card {
+  display: flex;
+  flex-direction: column;
+}
+
+/* Page sections: heading + summary, a rule, then the section's cards */
+.ov-section {
+  display: grid;
+  gap: 14px;
+  min-width: 0;
+}
+.ov-section + .ov-section {
+  margin-top: 32px;
+}
+/* Rule under each heading: solid --ink on the left, fading out to the right.
+   Built from --ink, so it works in light and dark themes. */
+.ov-section-head {
+  position: relative;
+  padding-bottom: 12px;
+}
+.ov-section-head::after {
+  content: '';
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  height: 2px;
+  border-radius: 2px;
+  background: linear-gradient(
+    90deg,
+    color-mix(in srgb, var(--ink) 55%, transparent) 0%,
+    color-mix(in srgb, var(--ink) 22%, transparent) 45%,
+    transparent 100%
+  );
+}
+.ov-section-head h2 {
+  margin: 0;
+  font-size: 18px;
+  letter-spacing: -0.01em;
+}
+.sr-only {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip: rect(0 0 0 0);
+  white-space: nowrap;
+}
+
+/* Stat tiles: numbers, no charts --------------------------------------------- */
+.ov-tiles {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 16px;
+}
+.ov-tile {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  min-width: 0;
+  padding: 20px 22px;
+  border-radius: var(--r-card);
+  background: var(--card-bg);
+  border: 1px solid var(--border);
+  box-shadow: var(--card-shadow);
+  -webkit-backdrop-filter: var(--card-blur);
+  backdrop-filter: var(--card-blur);
+}
+.ov-tile-label {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--muted);
+}
+.ov-tile-label svg {
+  color: var(--forest);
+  flex-shrink: 0;
+}
+.ov-tile-value {
+  font-size: 32px;
+  line-height: 1.05;
+  font-weight: 650;
+  letter-spacing: -0.03em;
+  color: var(--text);
+}
+.ov-tile-sub {
+  font-size: 12.5px;
+  color: var(--subtle);
+}
+.ov-delta {
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+}
+.ov-delta.is-up {
+  color: var(--pass);
+  font-weight: 600;
+}
+.ov-delta.is-down {
+  color: var(--fail);
+  font-weight: 600;
+}
+
+/* Needs attention ------------------------------------------------------------- */
+.ov-attention {
+  padding: 18px 24px;
+}
+.ov-attention-head {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+}
+.ov-attention-head > ul,
+.ov-attention-head > p {
+  flex: 1;
+  min-width: 0;
+}
+.ov-attention-head p {
+  margin: 0;
+  font-size: 13.5px;
+  color: var(--muted);
+}
+.ov-attention-list {
+  display: grid;
+  gap: 8px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  font-size: 13.5px;
+  color: var(--muted);
+}
+.ov-attention-list strong {
+  color: var(--text);
+}
+.ov-chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-top: 8px;
+}
+.ov-chip {
+  display: inline-flex;
+  align-items: center;
+  height: 26px;
+  padding: 0 11px;
+  border-radius: var(--pill);
+  background: var(--surface-2);
+  border: 1px solid var(--border);
+  font-size: 12px;
+  color: var(--muted);
+  white-space: nowrap;
+}
+.ov-chip.is-more {
+  color: var(--subtle);
+}
+
+/* Cards ---------------------------------------------------------------------- */
+.ov-card {
+  padding: 24px 26px;
+}
+.ov-card-head {
+  display: flex;
+  align-items: center;
+  gap: 13px;
+  margin-bottom: 18px;
+}
+.ov-card-head h3 {
+  margin: 0 0 4px;
+  font-size: 17px;
+  letter-spacing: -0.015em;
+}
+.ov-card-head p {
+  margin: 0;
+  font-size: 13px;
+  color: var(--muted);
+}
+.ov-pair {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 20px;
+}
+
+.ov-list {
+  display: grid;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+.ov-list li {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 12px 0;
+  border-top: 1px solid var(--border);
+}
+.ov-list-text {
+  flex: 1;
+  min-width: 0;
+}
+.ov-list-text strong,
+.ov-list-text small {
+  display: block;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.ov-list-text strong {
+  font-size: 13.5px;
+}
+.ov-list-text small {
+  margin-top: 3px;
+  font-size: 12px;
+  color: var(--subtle);
+}
+.ov-count {
+  font-size: 15px;
+  font-weight: 650;
+  font-variant-numeric: tabular-nums;
+}
+.ov-causes {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+  margin: -4px 0 12px;
+  font-size: 12.5px;
+  color: var(--subtle);
+}
+
+/* Tile visuals: mini ring + exact counts, mini columns ---------------------- */
+.ov-tile-body {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+}
+.ov-tile-main {
+  display: grid;
+  gap: 4px;
+  min-width: 0;
+}
+.ov-ring {
+  flex: 0 0 60px;
+  width: 60px;
+  height: 60px;
+}
+.ov-ring circle {
+  fill: none;
+  stroke-width: 9;
+}
+.ov-ring-track {
+  stroke: var(--viz-track);
+}
+
+.ov-details {
+  display: grid;
+  gap: 5px;
+  margin: 2px 0 0;
+  padding: 10px 0 0;
+  list-style: none;
+  border-top: 1px solid var(--border);
+  font-size: 12.5px;
+  color: var(--muted);
+}
+.ov-details li {
+  display: grid;
+  grid-template-columns: 10px 1fr auto;
+  align-items: center;
+  column-gap: 8px;
+}
+.ov-details b {
+  color: var(--text);
+  font-weight: 650;
+  font-variant-numeric: tabular-nums;
+}
+.ov-details small {
+  grid-column: 2 / -1;
+  font-size: 11.5px;
+  color: var(--subtle);
+}
+.ov-details li.is-empty {
+  opacity: 0.6;
+}
+.activity-swatch.is-blank {
+  background: var(--viz-track);
+}
+
+.ov-spark {
+  display: block;
+  width: 100%;
+  height: 30px;
+}
+.ov-spark rect {
+  fill: var(--viz-series);
+  opacity: 0.45;
+}
+.ov-spark rect.is-current {
+  opacity: 1;
+}
+.ov-spark rect.is-zero {
+  fill: var(--border-strong);
+  opacity: 1;
+}
+
+/* Ranked bars (most active users, error causes) ------------------------------- */
+.ov-bars {
+  display: grid;
+  gap: 4px;
+  margin: 0 0 6px;
+  padding: 0;
+  list-style: none;
+}
+.ov-bars li {
+  display: grid;
+  grid-template-columns: minmax(0, 1.1fr) minmax(60px, 1fr) auto;
+  align-items: center;
+  gap: 14px;
+  padding: 9px 0;
+}
+.ov-bars-name {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-width: 0;
+}
+.ov-bars-track {
+  display: block;
+  height: 10px;
+}
+.ov-bars-track > span {
+  display: block;
+  height: 100%;
+  min-width: 4px;
+  border-radius: 0 4px 4px 0;
+}
+.ov-bars-value {
+  min-width: 28px;
+  text-align: right;
+  font-size: 14px;
+  font-weight: 650;
+  font-variant-numeric: tabular-nums;
+}
+.ov-more {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding-top: 12px;
+  border-top: 1px solid var(--border);
+  font-size: 12.5px;
+  color: var(--subtle);
+}
+.ov-subhead {
+  margin: 14px 0 2px;
+  font-size: 12px;
+  letter-spacing: 0.8px;
+  text-transform: uppercase;
+  color: var(--subtle);
+}
+
+/* Activity chart ------------------------------------------------------------- */
+.activity-legend {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px 18px;
+  margin: 0 0 12px;
+  padding: 0;
+  list-style: none;
+  font-size: 13px;
+  color: var(--muted);
+}
+.activity-legend li {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+}
+.activity-swatch {
+  display: inline-block;
+  flex-shrink: 0;
+  width: 10px;
+  height: 10px;
+  border-radius: 3px;
+}
+
+.activity-plot {
+  position: relative;
+  border-radius: 12px;
+}
+.activity-plot:focus-visible {
+  outline: 2px solid var(--ink);
+  outline-offset: 4px;
+}
+.activity-plot svg {
+  display: block;
+  overflow: visible;
+}
+.activity-grid {
+  stroke: rgba(31, 61, 31, 0.1);
+  stroke-width: 1;
+}
+.activity-baseline {
+  stroke: rgba(31, 61, 31, 0.28);
+  stroke-width: 1;
+}
+.activity-tick {
+  fill: var(--subtle);
+  font-size: 11px;
+  font-variant-numeric: tabular-nums;
+}
+.activity-band {
+  fill: rgba(31, 61, 31, 0.06);
+}
+.activity-plot g.is-dim path,
+.activity-plot g.is-dim rect:not([fill='transparent']) {
+  opacity: 0.45;
+}
+.activity-plot path,
+.activity-plot rect {
+  transition: opacity 0.12s ease;
+}
+
+.activity-tip {
+  /* Inside the plot (cards clip overflow), pinned to its top edge */
+  position: absolute;
+  top: 4px;
+  transform: translateX(-50%);
+  z-index: 2;
+  min-width: 168px;
+  display: grid;
+  gap: 4px;
+  padding: 10px 12px;
+  pointer-events: none;
+  border-radius: 12px;
+  background: var(--surface);
+  border: 1px solid var(--border-strong);
+  box-shadow: 0 12px 24px -14px rgba(10, 25, 10, 0.45);
+  font-size: 12.5px;
+  color: var(--muted);
+}
+.activity-tip strong {
+  color: var(--text);
+  font-size: 13px;
+}
+.activity-tip-total {
+  margin-bottom: 2px;
+}
+.activity-tip-row {
+  display: grid;
+  grid-template-columns: 10px 1fr auto;
+  align-items: center;
+  gap: 8px;
+}
+.activity-tip-row b {
+  color: var(--text);
+  font-variant-numeric: tabular-nums;
+}
+
+.activity-table {
+  margin-top: 14px;
+  font-size: 13px;
+}
+.activity-table summary {
+  width: fit-content;
+  cursor: pointer;
+  color: var(--muted);
+  font-weight: 600;
+}
+.activity-table summary:hover {
+  color: var(--forest);
+}
+.activity-table-scroll {
+  max-height: 280px;
+  overflow: auto;
+  margin-top: 10px;
+  border: 1px solid var(--border);
+  border-radius: 12px;
+}
+.activity-table table {
+  width: 100%;
+  border-collapse: collapse;
+  font-variant-numeric: tabular-nums;
+}
+.activity-table th,
+.activity-table td {
+  padding: 8px 12px;
+  text-align: right;
+  border-bottom: 1px solid var(--border);
+  white-space: nowrap;
+}
+.activity-table th:first-child,
+.activity-table td:first-child {
+  text-align: left;
+}
+.activity-table th {
+  position: sticky;
+  top: 0;
+  background: var(--surface-2);
+  font-size: 12px;
+  color: var(--subtle);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .ov,
+  .activity-plot path,
+  .activity-plot rect {
+    transition: none;
+  }
+}
+@media (forced-colors: active) {
+  .activity-plot path,
+  .activity-plot rect:not([fill='transparent']) {
+    stroke: CanvasText;
+  }
+}
+
+/* Responsive ------------------------------------------------------------------ */
+@media (max-width: 1100px) {
+  .ov-tiles {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+  .ov-pair,
+  .ov-split {
+    grid-template-columns: 1fr;
+  }
+}
+@media (max-width: 760px) {
+  .ov-tile-body {
+    gap: 10px;
+  }
+  .ov-ring {
+    flex-basis: 48px;
+    width: 48px;
+    height: 48px;
+  }
+  .ov-card {
+    padding: 20px;
+  }
+  .ov-attention {
+    padding: 16px 18px;
+  }
+  .ov-attention-head {
+    flex-wrap: wrap;
+  }
+  .ov-attention-head > .outline-button {
+    width: 100%;
+    justify-content: center;
+  }
+  .ov-tile {
+    padding: 16px;
+  }
+  .ov-tile-value {
+    font-size: 26px;
+  }
+  .ov-bars li {
+    grid-template-columns: minmax(0, 1fr) 70px auto;
+    gap: 10px;
+  }
+}
